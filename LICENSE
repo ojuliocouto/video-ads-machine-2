@@ -19,10 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-NOTE: This project orchestrates HyperFrames (https://hyperframes.heygen.com),
-which is proprietary software with its own license. HyperFrames is NOT bundled
-or redistributed here; the setup step installs it from npm on the user's own
-machine. Review the HyperFrames license before commercial use at scale.
