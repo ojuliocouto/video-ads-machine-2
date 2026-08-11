@@ -328,10 +328,16 @@ _PRESET_MARKER_RE = re.compile(r"<!--\s*INJECT:preset:(?P<dim>[a-zA-Z0-9_-]+)\s*
 def _render_captions_html(groups: list[dict]) -> str:
     if not groups:
         return '<div id="caps" class="clip" data-start="0" data-duration="0" data-track-index="30"></div>'
-    caps_start = groups[0]["start"]
-    caps_dur = groups[-1]["end"] - caps_start
+    # O wrapper #caps comeca em 0 e cobre ate a ultima palavra, SEMPRE.
+    # Antes ele comecava no 1o grupo (data-start=5.04 no ad03v2) e o render engolia
+    # os primeiros grupos: o overlay saia VAZIO de 5s a 16s, mesmo com os grupos
+    # presentes no HTML, e a 1a legenda so aparecia em 16,5s. Foram 13s (25% do ad)
+    # sem legenda, o defeito que mais derrubou nota na leva inteira. Quem controla
+    # a visibilidade de cada grupo e o GSAP via data-g-start; o clip so precisa
+    # estar vivo desde o inicio.
+    caps_dur = groups[-1]["end"]
     lines = [
-        f'<div id="caps" class="clip" data-start="{caps_start:.3f}" '
+        f'<div id="caps" class="clip" data-start="0" '
         f'data-duration="{caps_dur:.3f}" data-track-index="30">'
     ]
     # Atencao: as legendas usam attrs CUSTOM (data-g-start/data-w-start), NAO

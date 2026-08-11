@@ -68,7 +68,7 @@
         color:rgba(255,255,255,.9); text-transform:none; }
 
       /* ---------- LOWER THIRD (TOP) ---------- */
-      #lt { position:absolute; left:60px; top:70px; z-index:40;
+      #lt { position:absolute; left:60px; top:270px; z-index:40;
         display:flex; align-items:center; gap:20px;
         padding:18px 36px 18px 20px; border-radius:22px;
         background:rgba(12,13,20,.6); border:1px solid rgba(255,255,255,.14);
@@ -94,28 +94,62 @@
 
       /* ---------- CAPTIONS (legenda editorial) ---------- */
       #caps { position:absolute; inset:0; z-index:35; pointer-events:none; }
-      #caps .cgrp { position:absolute; left:0; right:0; bottom:330px; padding:0 130px;
-        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 14px; }
+      #caps .cgrp { position:absolute; left:0; right:0; bottom:545px; padding:26px 130px;
+        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 14px;
+        /* scrim junto da sombra: mesmo tratamento que ja funciona no #cta (o unico
+           elemento que a auditoria mediu com contraste bom). Radial que desvanece bem
+           antes da borda pra nao virar retangulo visivel sobre o avatar escuro.
+           A elipse de 44% cobria "Esse aqui é" mas VAZAVA nas frases longas: a
+           auditoria mediu 1,08:1 em "meu editor" e 1,20:1 em "publica", ambas com a
+           palavra caindo fora do scrim, sobre b-roll branco. 68% de largura cobre a
+           linha inteira, e o miolo mais opaco garante o minimo de 3:1. */
+        background:radial-gradient(ellipse 68% 128% at 50% 50%,
+          rgba(4,5,10,.80) 0%, rgba(4,5,10,.62) 46%, rgba(4,5,10,.28) 72%,
+          rgba(4,5,10,0) 88%); }
       #caps .cw { font-family:"Montserrat"; font-weight:600; font-size:60px;
         color:#fff; letter-spacing:.2px; line-height:1.3;
-        text-shadow:0 2px 8px rgba(0,0,0,.55); }
+        /* a legenda e BRANCA e cai sobre b-roll CLARO em varios blocos (pagina, doc,
+           dashboard). Medido no ad02v2: o contraste caia pra 1.18:1, ou seja ilegivel
+           (minimo WCAG pra texto grande e 3:1) em ~35% do anuncio. A sombra antiga
+           (0 2px 8px .55) so funcionava sobre fundo escuro. Sombra dupla + halo largo
+           segura o texto sobre qualquer fundo sem virar contorno duro. */
+        text-shadow:0 2px 10px rgba(0,0,0,.92), 0 0 26px rgba(0,0,0,.8),
+                    0 0 3px rgba(0,0,0,.65); }
       #caps .cw.kw { font-family:"Playfair Display", serif; font-weight:600; font-style:italic;
         font-size:66px; letter-spacing:0; color:#fff; }
       /* ---------- LOGO DO EVENTO ---------- */
-      #ev-logo { position:absolute; bottom:90px; left:50%;
-        width:600px; height:auto; z-index:48; filter:drop-shadow(0 8px 30px rgba(0,0,0,.55)); }
+      #ev-logo { position:absolute; bottom:390px; left:50%;
+        width:500px; height:auto; z-index:48;
+        /* o logo e PNG com fundo transparente e o wordmark e BRANCO: sobre a camiseta
+           clara do apresentador sumia. O scrim do #cta ja desvanece nessa altura, entao o
+           logo leva o proprio fundo: como a arte e transparente, o gradiente aparece
+           atras do wordmark e garante o contraste. */
+        padding:78px 120px; box-sizing:content-box;
+        /* o gradiente TEM que chegar em transparent bem antes da borda da caixa,
+           senao vira um retangulo preto visivel (foi o que aconteceu na 1a tentativa,
+           com raio 128% vertical: o gradiente batia na borda ainda opaco). */
+        background:radial-gradient(ellipse 42% 40% at 50% 50%, rgba(4,5,10,.88) 0%, rgba(4,5,10,.52) 46%, rgba(4,5,10,0) 72%);
+        filter:drop-shadow(0 4px 10px rgba(0,0,0,.95)) drop-shadow(0 8px 30px rgba(0,0,0,.7)); }
+
 
       /* ---------- CTA (editorial) ---------- */
-      #cta { position:absolute; left:0; right:0; bottom:520px; z-index:46;
+      #cta { position:absolute; left:0; right:0; bottom:700px; z-index:46;
         display:flex; flex-direction:column; align-items:center; gap:30px; }
+      /* scrim: da contraste pro CTA e pro logo sobre a camiseta clara do apresentador
+         (contraste medido antes: ~1.3:1, ilegivel). Estende pra baixo pra pegar o logo. */
+      #cta::before { content:''; position:absolute; left:-40px; right:-40px;
+        top:-140px; bottom:-430px; z-index:-1; pointer-events:none;
+        background:radial-gradient(64% 48% at 50% 58%, rgba(4,5,10,.80) 0%, rgba(4,5,10,.46) 56%, rgba(4,5,10,0) 84%); }
       #cta .lead { font-family:"Inter"; font-weight:400; font-size:30px; letter-spacing:6px;
-        color:rgba(255,255,255,.62); text-transform:uppercase; text-shadow:0 2px 12px rgba(0,0,0,.6); }
+        color:rgba(255,255,255,.92); text-transform:uppercase;
+        text-shadow:0 2px 6px rgba(0,0,0,.95), 0 4px 18px rgba(0,0,0,.8); }
       #cta .pill { display:flex; align-items:center; gap:22px;
         padding:26px 64px; border-radius:100px;
-        background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.38); color:#fff;
+        background:rgba(10,11,16,.72); border:1.5px solid rgba(255,255,255,.55); color:#fff;
         font-family:"Inter"; font-weight:500; font-size:46px; letter-spacing:2px;
         text-transform:none; backdrop-filter:blur(6px); box-shadow:0 16px 44px rgba(0,0,0,.4); }
-      #cta .arrow { font-size:58px; color:rgba(255,255,255,.6); }
+      #cta .arrow { font-size:58px; color:rgba(255,255,255,.88);
+        text-shadow:0 2px 8px rgba(0,0,0,.9); }
     </style>
   </head>
   <body>
@@ -158,13 +192,7 @@
       <video data-hf-id="hf-xays" id="b5_vid" class="broll-vid clip" src="broll_aula.mp4" muted playsinline data-start="35.36" data-duration="5.1" data-track-index="18"></video>
 
       <!-- LOWER THIRD -->
-      <div data-hf-id="hf-1nhp" id="lt" class="clip" data-start="2.7" data-duration="4.4" data-track-index="40">
-        <div data-hf-id="hf-up6m" class="ava">T</div>
-        <div data-hf-id="hf-yeow">
-          <div data-hf-id="hf-3q1w" class="name">Apresentador</div>
-          <div data-hf-id="hf-pd7v" class="role">Sua Marca · I.A</div>
-        </div>
-      </div>
+      <!-- (selo/lower-third removido a pedido: nao usar bolinha do apresentador) -->
 
       <!-- CAPTIONS: build_timeline injeta o #caps aqui (word-by-word com data-start/data-end) -->
       <!-- INJECT:captions -->
@@ -207,31 +235,52 @@
         }
       })();
       gsap.set("#grid-pixelate-overlay .grid-cell", { scale: 0 });
-      tl.to("#grid-pixelate-overlay .grid-cell",
-        { scale: 1, duration: 0.4, stagger: { amount: 0.28, from: "start" }, ease: "power2.inOut" }, 2.05);
-      tl.to("#grid-pixelate-overlay .grid-cell",
-        { scale: 0, duration: 0.4, stagger: { amount: 0.28, from: "end" }, ease: "power2.inOut" }, 2.75);
+      /* INJECT:wipes */
 
       // ===== B-ROLLS: fade + scale in/out =====
       const BROLLS = [{"id": "b1", "src": "broll01.mp4", "start": 2.5, "dur": 3.0, "tk": 10, "sk": 11}, {"id": "b2", "src": "broll02.mp4", "start": 5.6, "dur": 4.0, "tk": 12, "sk": 13}, {"id": "b3", "src": "broll03.mp4", "start": 10.9, "dur": 4.7, "tk": 14, "sk": 15}, {"id": "b4", "src": "broll04.mp4", "start": 18.9, "dur": 4.06, "tk": 16, "sk": 17}, {"id": "b5", "src": "broll_aula.mp4", "start": 35.36, "dur": 5.1, "tk": 18, "sk": 19}];
-      BROLLS.forEach(function (b) {
+      BROLLS.forEach(function (b, i) {
         const scrim = document.getElementById(b.id + "_scrim");
         const card  = document.getElementById(b.id + "_vid");
         const tag   = document.getElementById(b.id + "_tag");
-        gsap.set(scrim, { opacity: 0 });
-        gsap.set(card,  { opacity: 0, scale: 0.985 });
-        gsap.set(tag,   { opacity: 0, y: 10 });
-        tl.to(scrim, { opacity: 1, duration: 0.28, ease: "power1.out" }, b.start);
-        tl.to(card,  { opacity: 1, scale: 1, duration: 0.4, ease: "power2.out" }, b.start + 0.02);
-        tl.to(tag,   { opacity: 1, y: 0, duration: 0.32, ease: "power2.out" }, b.start + 0.12);
+        // No OVERLAY (camada de texto com alpha) o strip_overlay REMOVE scrim/card/tag,
+        // porque lá só entra texto. Sem esta guarda o gsap recebia null, lançava
+        // "Cannot read properties of null (reading '_gsap')" e MATAVA o script inteiro:
+        // tudo que é registrado depois deste bloco (legendas, letterings, CTA, logo)
+        // nunca chegava ao timeline, e window.__timelines.main nem existia. Foi a causa
+        // dos trechos longos sem legenda em TODA a leva (13s no ad03v2, 25% do anúncio).
+        if (!scrim || !card || !tag) return;
+        const ADJ_GAP = 0.6;
+        const prev = BROLLS[i - 1];
+        const next = BROLLS[i + 1];
+        const isOpening = b.start <= 0.001;
+        // "vem de um insert colado" (ou opening): o card anterior/o wipe ja cobrem o avatar,
+        // entao entra por HARD-CUT. Se vem do avatar, o card entra com fade (coberto pelo wipe).
+        const fromAdjacent = isOpening || (prev && (b.start - (prev.start + prev.dur)) <= ADJ_GAP);
+        const toAdjacent = next && (next.start - (b.start + b.dur)) <= ADJ_GAP;
+        // SCRIM SEMPRE INSTANT-ON: cobre o avatar em 100% durante toda a janela do clip.
+        // (segurar via GSAP nao funcionava: o HyperFrames corta o clip no fim do data-duration,
+        // deixando o proximo fade-in transparente e vazando o rosto por ~0.2s.)
+        gsap.set(scrim, { opacity: 1 });
+        if (fromAdjacent) {
+          gsap.set(card, { opacity: 1, scale: 1 });
+        } else {
+          gsap.set(card, { opacity: 0, scale: 0.985 });
+          tl.to(card, { opacity: 1, scale: 1, duration: 0.4, ease: "power2.out" }, b.start + 0.02);
+        }
+        gsap.set(tag, { opacity: 0, y: 10 });
+        tl.to(tag, { opacity: 1, y: 0, duration: 0.32, ease: "power2.out" }, b.start + 0.12);
         const out = b.start + b.dur;
-        tl.to([scrim, card, tag], { opacity: 0, duration: 0.24, ease: "power1.in" }, out - 0.24);
+        if (toAdjacent) {
+          // proximo insert cobre no hard-cut: so tira a tag; scrim/card somem pelo fim do clip window
+          tl.to(tag, { opacity: 0, duration: 0.2, ease: "power1.in" }, out - 0.18);
+        } else {
+          // volta pro avatar: fade out limpo do broll inteiro
+          tl.to([scrim, card, tag], { opacity: 0, duration: 0.24, ease: "power1.in" }, out - 0.24);
+        }
       });
 
-      // ===== LOWER THIRD =====
-      gsap.set("#lt", { x: -60, opacity: 0 });
-      tl.to("#lt", { x: 0, opacity: 1, duration: 0.55, ease: "power2.out" }, 2.8);
-      tl.to("#lt", { opacity: 0, x: -40, duration: 0.4, ease: "power1.in" }, 6.75);
+      // ===== LOWER THIRD removido (sem selo/bolinha do apresentador) =====
 
       // ===== CAPTIONS =====
       // ===== CAPTIONS (data-driven): le o #caps injetado pelo build_timeline =====
@@ -248,7 +297,9 @@
           gsap.set(span, { opacity: 0, y: 8 });
           tl.to(span, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out", overwrite: "auto" }, wStart);
         });
-        tl.to(grp, { opacity: 0, duration: 0.16, ease: "power1.in" }, gEnd - 0.06);
+        // fade-out termina EXATAMENTE em gEnd (antes era gEnd-0.06 + 0.16s = gEnd+0.10,
+        // vazava por cima do fade-in do proximo grupo e empilhava duas legendas)
+        tl.to(grp, { opacity: 0, duration: 0.1, ease: "power1.in" }, gEnd - 0.1);
         tl.set(grp, { opacity: 0, visibility: "hidden" }, gEnd);
       });
 
