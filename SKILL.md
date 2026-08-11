@@ -43,7 +43,7 @@ Se o usuário não tem os assets ainda, avise que ele precisa de: `avatar.mp4` (
 
 ## Workflow (conduza o usuário por estes passos)
 
-1. **Formato:** pergunte `reel-editorial` (flagship) ou `ad-hook` (anúncio, hook mais forte).
+1. **Formato:** pergunte `reel-editorial` (flagship, 9:16), `reel-editorial-1x1` (1:1 quadrado, pro feed) ou `ad-hook` (anúncio, hook mais forte).
 2. **Brief + roteiro:** receba o roteiro anotado e os assets. Convenção do roteiro:
    - Fala normal = palavra falada (vira legenda verbatim).
    - `*palavra*` = keyword (sai em itálico serif na legenda). `*abre span fecha*` = várias palavras.
@@ -73,7 +73,8 @@ Se o usuário não tem os assets ainda, avise que ele precisa de: `avatar.mp4` (
 ## Regra de ouro dos presets
 Só entra na biblioteca preset que foi **renderizado e auditado frame a frame**. As variantes marcadas `unvalidated` nos arquivos de `presets/` ainda precisam passar por isso antes de virar padrão de entrega.
 
-## Gotchas (leia `references/hyperframes-gotchas.md`)
+## Gotchas (leia `references/hyperframes-gotchas.md` e `LEARNINGS.md`)
+- **Antes de mexer na lógica de montagem/timeline, leia `LEARNINGS.md`.** É a memória viva do motor: cada regra de montagem e cada item do checklist de auditoria pré-entrega nasceu de um defeito real de produção. Não regrida nenhuma sem revalidar frame a frame.
 - Logo/elemento centralizado: `left:50%` no CSS + `xPercent:-50` no GSAP em TODO tween. NUNCA `translateX(-50%)` no CSS (o `y` do GSAP estica a logo gigante: foi o bug do v6).
 - Legenda usa attrs custom (`data-w-start`, `data-g-start`), não `data-start`, senão o HyperFrames trata cada palavra como clip.
 - Nunca escreva o texto literal de um marcador `INJECT:` dentro de um comentário do script (o `build` faz replace de todas as ocorrências e injeta HTML no JS).
@@ -81,5 +82,5 @@ Só entra na biblioteca preset que foi **renderizado e auditado frame a frame**.
 
 ## Estrutura do projeto
 - `references/` style.md (números), blocks.md, presets.md, workflow.md, hyperframes-gotchas.md
-- `blocks/` partials HTML/CSS/GSAP · `presets/` variantes por dimensão · `templates/` reel-editorial, ad-hook
+- `blocks/` partials HTML/CSS/GSAP · `presets/` variantes por dimensão · `templates/` reel-editorial, reel-editorial-1x1, ad-hook
 - `scripts/` setup.sh, check_assets.py, build_timeline.py, audit_frames.sh · `fonts/` woff2 · `demo/` pacote genérico

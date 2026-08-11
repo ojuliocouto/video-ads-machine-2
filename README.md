@@ -5,7 +5,7 @@ A Claude Code skill that turns a script + voice + talking-head + b-rolls into a 
 The reel style (warm cinematic grade, bold word-by-word captions, serif letterings anchored to the chest, a hook that opens on the presenter, an end-card logo) comes from a reference reel that was audited frame by frame and approved.
 
 ## What it IS
-- A declarative composition engine for 9:16 reels and ads.
+- A declarative composition engine for 9:16 reels and ads (plus a 1:1 square variant for the feed).
 - A tested library of **blocks** (hook, captions, b-roll cards, letterings, lower-third, end-card, color grade, transitions, stat count-up) and **presets** across 6 style dimensions.
 - Automation for the tedious part: aligning the caption word-by-word to the voice and placing letterings on the exact word they belong to.
 - A self-bootstrapping skill: the first run installs and checks HyperFrames for you.
@@ -43,10 +43,11 @@ bash scripts/setup.sh
 
 ## Content of this repo
 - `SKILL.md` : the skill entry point (embedded onboarding + workflow router).
+- `LEARNINGS.md` : the engine's living memory. Every assembly rule and pre-delivery audit check, each one born from a real production defect. Read it before touching the timeline logic.
 - `references/` : `style.md` (exact validated numbers), `blocks.md`, `presets.md`, `workflow.md`, `hyperframes-gotchas.md`.
 - `blocks/` : reusable HTML/CSS/GSAP partials.
 - `presets/` : one file per style variant, grouped by dimension (caption, lettering, transition, grade, hook, endcard).
-- `templates/` : `reel-editorial` (flagship) and `ad-hook`.
+- `templates/` : `reel-editorial` (flagship, 9:16), `reel-editorial-1x1` (1:1 square, for feed), and `ad-hook`.
 - `scripts/` : `setup.sh`, `check_assets.py`, `build_timeline.py`, `audit_frames.sh`.
 - `fonts/` : embedded open woff2 fonts (Inter, Montserrat, Playfair Display Italic, Archivo).
 - `demo/` : a starter pack so you can render something end to end (see `demo/README.md`).
