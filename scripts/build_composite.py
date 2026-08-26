@@ -188,6 +188,35 @@ def mixar_som(video, ad, workdir):
     return video
 
 
+def _impressao_template(fmt):
+    """Hash do template que o overlay usa. Ver `_conferir_template` logo abaixo."""
+    import hashlib
+    t = V2 / "templates" / ("reel-editorial-1x1" if fmt == "1x1" else "reel-editorial") / "index.html"
+    return hashlib.sha256(t.read_bytes()).hexdigest()[:16] if t.exists() else "ausente"
+
+
+def _conferir_template(fmt, antes):
+    """GATE: o template nao pode mudar NO MEIO do build (defeito real, 26/08/2026).
+
+    O jh13 ficou REPROVADO no gate de colisao por meses com a legenda na testa do
+    Thales. Nao era calibragem: o passo [1/6] gerou o overlay as 00:15:36 e o
+    template so foi corrigido as 00:16:37, com o build ainda rodando. Os passos
+    seguintes usaram um overlay feito da versao ANTERIOR, e o log disse PRONTO.
+
+    O build leva ~25 minutos e le o template uma vez so, no comeco: a janela pra
+    isso acontecer e larga, e o sintoma (um grupo de legenda com a classe errada
+    no meio de vizinhos certos) nao parece defeito de processo, parece defeito de
+    calculo. Custou uma investigacao inteira. Agora reprova na hora.
+    """
+    depois = _impressao_template(fmt)
+    if depois != antes:
+        print("\n--- GATE DE TEMPLATE: REPROVA ---")
+        print(f"   o template mudou durante o build ({antes} -> {depois}).")
+        print("   o overlay foi gerado da versao ANTIGA, entao este render nao vale.")
+        print("   conserto: rodar o build de novo, sem editar template no meio.")
+        sys.exit(1)
+
+
 def build(ad, look, fmt):
     lk, sfx = LK[look], SUFFIX[fmt]
     base_cfg = json.loads((V2L / "configs" / f"{ad}_{lk}{sfx}.json").read_text())
@@ -200,8 +229,10 @@ def build(ad, look, fmt):
     cfg_path = workdir.parent / f"_cfg_{ad}_{lk}{sfx}.json"
     workdir.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False))
+    _tmpl_antes = _impressao_template(fmt)
     print("[1/6] gen_ad_v2 (transcreve + monta html)...")
-    run([sys.executable, str(V2L / "gen_ad_v2.py"), str(cfg_path)])
+    run([sys.executable, str(CODIGO / "gen_ad_v2.py"), str(cfg_path)])
+    _conferir_template(fmt, _tmpl_antes)   # ja mudou enquanto o gen rodava?
 
     # 2) strip -> overlay transparente
     # GATE DE CONGELAMENTO (18/08/2026): insert que pede mais fonte do que o arquivo tem
@@ -314,6 +345,7 @@ def build(ad, look, fmt):
          "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p",
          "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
          "-c:a", "aac", "-ar", "48000", "-b:a", "192k", "-movflags", "+faststart", str(final)])
+    _conferir_template(fmt, _tmpl_antes)   # e mudou durante os 25min de render?
     final = mixar_som(final, ad, workdir)
     final = normalizar_loudness(final)
     wa = V1 / "output" / f"{ad}_{look}_v2composite_{fmt}_whatsapp.mp4"
