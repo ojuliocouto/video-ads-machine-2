@@ -54,7 +54,7 @@ COLORWAYS = {
 # zoom 4x, letra a letra: era PT Serif, não Montserrat (que eu tinha chutado).
 FONTES = [
     "/System/Library/Fonts/Supplemental/PTSerif.ttc",
-    os.path.expanduser("~/video-ads-machine/fonts/PlayfairDisplay.ttf"),
+    str(__import__("caminhos").FONTS_V1 / "PlayfairDisplay.ttf"),
     "/System/Library/Fonts/Supplemental/Georgia.ttf",
 ]
 
