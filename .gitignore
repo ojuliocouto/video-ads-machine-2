@@ -22,3 +22,6 @@ _tmp*/
 
 # excecao: fontes abertas SAO versionadas (OFL/open), sobrescreve o *.png acima nao se aplica a woff2
 !fonts/*.woff2
+
+# arte real de cliente (logo, wordmark): nunca versionar
+assets/
