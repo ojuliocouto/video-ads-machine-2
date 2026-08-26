@@ -10,6 +10,8 @@
       @font-face { font-family:"Inter"; font-weight:300; font-style:normal; font-display:block; src:url("fonts/inter-300.woff2") format("woff2"); }
       @font-face { font-family:"Inter"; font-weight:400; font-style:normal; font-display:block; src:url("fonts/inter-400.woff2") format("woff2"); }
       @font-face { font-family:"Inter"; font-weight:600; font-style:normal; font-display:block; src:url("fonts/inter-600.woff2") format("woff2"); }
+      @font-face { font-family:"Inter"; font-weight:700; font-style:normal; font-display:block; src:url("fonts/inter-700.woff2") format("woff2"); }
+      @font-face { font-family:"Inter"; font-weight:800; font-style:normal; font-display:block; src:url("fonts/inter-800.woff2") format("woff2"); }
       @font-face { font-family:"Playfair Display"; font-weight:500; font-style:italic; font-display:block; src:url("fonts/playfair-italic-500.woff2") format("woff2"); }
       @font-face { font-family:"Playfair Display"; font-weight:600; font-style:italic; font-display:block; src:url("fonts/playfair-italic-600.woff2") format("woff2"); }
       @font-face { font-family:"Playfair Display"; font-weight:700; font-style:italic; font-display:block; src:url("fonts/playfair-italic-700.woff2") format("woff2"); }
@@ -194,7 +196,7 @@
          76) encolhe a caixa de 2 linhas pra ~199px, com folga real sob o queixo
          (medido em y~1610 pro look neon_creme; caixa fica entre y~1681 e y~1880). */
       #caps .cgrp.cgrp-costura { bottom:40px; padding-top:24px; padding-bottom:24px; }
-      #caps .cgrp.cgrp-costura .cw { font-size:58px; line-height:1.28; }
+      #caps .cgrp.cgrp-costura .cw { font-size:61px; line-height:1.14; }
       /* padding vertical maior: o degrade precisa de espaco DENTRO da caixa pra chegar
          em transparente. Com 26px a elipse era cortada e virava retangulo (medido pelo
          diretor de arte no jh16: degrau de -47 em y=1224 e +99 em y=1375). */
@@ -214,19 +216,53 @@
            panico, deixa esteticamente pobre"). O contraste que o scrim garantia
            passa pro CONTORNO por glifo (paint-order abaixo), estilo CapCut: preto
            atras do traco, legivel sobre b-roll claro sem mancha na tela. */ }
-      #caps .cw { font-family:"Montserrat"; font-weight:600; font-size:76px;
-        color:#fff; letter-spacing:.2px; line-height:1.3;
-        /* a legenda e BRANCA e cai sobre b-roll CLARO em varios blocos (pagina, doc,
-           dashboard). Medido no ad02v2: o contraste caia pra 1.18:1, ou seja ilegivel
-           (minimo WCAG pra texto grande e 3:1) em ~35% do anuncio. A sombra antiga
-           (0 2px 8px .55) so funcionava sobre fundo escuro. Sombra dupla + halo largo
-           segura o texto sobre qualquer fundo sem virar contorno duro. */
-        paint-order:stroke fill; -webkit-text-stroke:9px rgba(5,6,10,.9);
-        text-shadow:0 3px 14px rgba(0,0,0,.55); }
-      #caps .cw.kw { font-family:"Playfair Display", serif; font-variant-numeric:lining-nums; font-feature-settings:"lnum" 1; font-weight:600; font-style:italic;
-        font-size:66px; letter-spacing:0; color:#fff;
-        paint-order:stroke fill; -webkit-text-stroke:8px rgba(5,6,10,.9);
-        text-shadow:0 3px 14px rgba(0,0,0,.55); }
+      /* LEGENDA RECALIBRADA (26/08/2026). O Julio: "a legenda ta ruim, grosseira,
+         nao ta bonita". Quatro defeitos, todos medidos. A referencia pra corrigir
+         estava na propria maquina e nunca tinha sido usada pelo projeto:
+         ~/.claude/skills/embedded-captions/references/aesthetic-principles.md
+
+         1. O CONTORNO DE 9px SOLDAVA AS LETRAS. Com `paint-order:stroke fill` metade
+            do traco fica pra fora, entao 9px viram 4,5px pra fora por glifo. A folga
+            lateral entre hastes a 76px e de 7 a 9px: os dois lados somavam 9px de tinta
+            no vao e as letras encostavam. E a contraforma do a, do e e do s (8 a 12px)
+            fechava. Isso E o "grosseira, borrada". A regra 3 pede 2 a 3px pra fora, e
+            0.065em a 80px da 5,2px de traco, 2,6px pra fora.
+            (Nao comparar direto com o libass do capcut-ads/estilos.py: la o contorno e
+            SO pra fora, entao os 3.2 de la equivalem a ~6,4px aqui. Nao dividir 2x.)
+
+         2. PESO ERRADO POR FALTA DE @font-face. Inter 700/800 e Archivo 700/800/900 ja
+            estavam em fonts/ sem serem declarados: usava-se o peso mais leve que havia
+            (600) e compensava-se com contorno grosso, o inverso do certo. Medido com
+            fontTools, a troca sai de graca: Inter 800 a 80px ocupa 1.559px de linha
+            contra 1.576px do Montserrat 600 a 76px. Sobe corpo E peso, e a linha fica
+            1% mais CURTA. Nenhuma calibragem de largura muda.
+
+         3. DUAS FAMILIAS NA MESMA LINHA. Regra 5: uma familia, dois pesos no maximo;
+            misturar sans com serif e "o tell amador numero 1". O Playfair sai da legenda
+            e continua no lettering, que e outro nivel hierarquico (a voz da marca).
+
+         4. A ENFASE ERA MENOR QUE O TEXTO, e italica. A regra 8 proibe italico pra
+            enfase (em movimento le como "inclinado", nao "enfatizado") e manda usar
+            peso, cor ou tamanho. Aqui a kw muda UMA propriedade: a cor.
+
+         A SOMBRA CONTINUA FAZENDO O TRABALHO QUE FAZIA. O comentario antigo registrava
+         contraste de 1.18:1 sobre b-roll claro. A sombra dupla nova (contato curto +
+         ambiente largo) e a prioridade 2 da regra 3, e o contorno de 2,6px segue
+         presente: o que sai e o excesso que soldava, nao a protecao.
+
+         GEOMETRIA INTOCADA. `bottom`, `padding` e `position` de .cgrp nao mudam: a folga
+         da costura foi paga com tres calibragens. E line-height de 1.30 pra 1.14 deixa a
+         caixa de duas linhas 15px mais BAIXA, entao o texto fica mais longe do rosto,
+         nunca mais perto. */
+      #caps .cw { font-family:"Inter"; font-weight:800; font-size:80px;
+        color:#F5EFE6; letter-spacing:-0.02em; line-height:1.14;
+        paint-order:stroke fill; -webkit-text-stroke:0.065em rgba(6,7,12,.92);
+        text-shadow:0 2px 5px rgba(0,0,0,.55), 0 8px 26px rgba(0,0,0,.42); }
+      /* Enfase por COR, uma propriedade so: terracota da marca, o mesmo tom do
+         sunburst do wordmark. Herda familia, peso, corpo, tracking e contorno.
+         Nao muda de tamanho de proposito: a caixa e ancorada por `bottom`, entao
+         crescer a largura empurraria pra duas linhas e o TOPO subiria pro queixo. */
+      #caps .cw.kw { color:#E87D4E; }
       /* logo da OCC DENTRO do lettering (roteiro: "lettering + logo da occ").
          Largura menor que a do #ev-logo do fim (500px) pra ler como assinatura do
          lettering, nao como fechamento do anuncio. */

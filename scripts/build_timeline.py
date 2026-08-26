@@ -187,11 +187,44 @@ def _close_caption_group(bucket: list[dict]) -> dict:
     }
 
 
+# Quanto um grupo de legenda SEGURA depois da ultima palavra, pra atravessar a pausa
+# da fala. Ver `_segurar_nas_pausas`.
+SEGURAR_MAX = 1.30      # nunca segurar mais que isso
+SEGURAR_FOLGA = 0.06    # respiro antes do proximo grupo entrar
+
+
+def _segurar_nas_pausas(groups, segurar_max=SEGURAR_MAX, folga=SEGURAR_FOLGA):
+    """Estende o fim de cada grupo ate perto do inicio do proximo.
+
+    POR QUE (26/08/2026): o grupo morria na ultima palavra, entao toda pausa da fala
+    virava tela sem texto nenhum. Medido no jh13: 11 vaos de 1,0 a 1,5s, somando 12%
+    do anuncio, e o `gate-ad.py` reprova acima de 12% ("o anuncio roda mudo em feed
+    silencioso"). Nos tres vaos que conferi era ele falando em tela cheia, sem legenda.
+
+    Segurar a frase durante a pausa e o que o CapCut faz e o que o olho espera: a
+    legenda acompanha o pensamento, nao a silaba. O teto de 1,30s existe pra frase
+    velha nao ficar pendurada quando a pausa e longa de verdade (troca de bloco,
+    respiro dramatico): ai a tela limpa e intencional.
+
+    Nao mexe em `start` nem na ordem: so empurra `end` pra frente, no maximo ate
+    `folga` antes do proximo grupo. Grupo nunca passa a se sobrepor ao seguinte.
+    """
+    for atual, prox in zip(groups, groups[1:]):
+        limite = prox["start"] - folga
+        alvo = min(atual["end"] + segurar_max, limite)
+        if alvo > atual["end"]:
+            atual["end"] = round(alvo, 3)
+    return groups
+
+
 def group_captions(words: list[dict], max_words: int = 3) -> list[dict]:
     """Agrupa palavras em janelas de legenda respeitando pontuacao.
 
     Fecha o grupo ao atingir `max_words` OU quando a ultima palavra
     adicionada termina em pontuacao (.,?!;:), o que vier primeiro.
+
+    Depois de agrupar, cada grupo SEGURA durante a pausa da fala
+    (ver `_segurar_nas_pausas`), pra a tela nao ficar sem texto entre frases.
     """
     groups: list[dict] = []
     bucket: list[dict] = []
@@ -202,7 +235,7 @@ def group_captions(words: list[dict], max_words: int = 3) -> list[dict]:
             bucket = []
     if bucket:
         groups.append(_close_caption_group(bucket))
-    return groups
+    return _segurar_nas_pausas(groups)
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +379,16 @@ def _render_captions_html(groups: list[dict]) -> str:
     # anima via GSAP lendo esses attrs custom). So o #caps (wrapper) e clip.
     for group in groups:
         lines.append(
-            f'  <div class="cgrp" data-g-start="{group["start"]:.3f}" '
+            # "baixa" vem do gen_ad_v2 quando a legenda cai sobre insert que JA TEM texto
+            # proprio (card de depoimento, print de prova social). La ela desce pro rodape
+            # em vez de pousar no paragrafo do card. Suprimir era a primeira ideia e deu
+            # errado: sem legenda o AD15 ficou 6,0s sem texto de tela e o gate reprovou
+            # (teto de 12% do video sem texto). Descer resolve os dois lados.
+            # "costura" (split) tem prioridade sobre "baixa": no split a posicao baixa
+            # cai na boca do apresentador, que e o defeito que ela deveria evitar.
+            f'  <div class="cgrp'
+            f'{" cgrp-costura" if group.get("costura") else (" cgrp-baixa" if group.get("baixa") else "")}" '
+            f'data-g-start="{group["start"]:.3f}" '
             f'data-g-end="{group["end"]:.3f}">'
         )
         for word in group["words"]:
@@ -365,7 +407,10 @@ def _render_letterings_html(letterings: list[dict]) -> str:
     for i, lett in enumerate(letterings):
         track = 32 + i
         blocks.append(
-            f'<div class="lett clip" id="{lett["id"]}" data-start="{lett["start"]:.3f}" '
+            # "split" vem do gen_ad_v2 quando o lettering cai num bloco de tela dividida.
+            # La ele desce pro peito do Thales; centrado no quadro ele pousaria no rosto.
+            f'<div class="lett clip{" lett-split" if lett.get("split") else ""}" '
+            f'id="{lett["id"]}" data-start="{lett["start"]:.3f}" '
             f'data-duration="{lett["dur"]:.3f}" data-track-index="{track}">\n'
             f'  <div class="lead">{lett["lead"]}</div>\n'
             f'  <div class="key">{lett["key"]}</div>\n'

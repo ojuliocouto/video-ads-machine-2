@@ -8,7 +8,7 @@ import os, re, sys, json, glob, subprocess, unicodedata, difflib
 from PIL import Image, ImageDraw, ImageFont
 from parser_roteiro import parse
 
-from caminhos import DADOS as _D  # noqa: E402
+from caminhos import DADOS as _D, ESTADO as _EST  # noqa: E402
 BASE=str(_D)
 # TMP e POR RUN (18/08/2026): dois builds em paralelo compartilhavam _tmp_rot com os
 # mesmos sNN.mp4 e se atropelavam; o gate de duracao abortava os dois com numeros
@@ -247,6 +247,7 @@ SPLIT_BOT_H = H - SPLIT_TOP_H   # deriva: estava 980 digitado 2x, e dessincroniz
 # nunca linha dura" (banco-referencias-edicao, REF-01 e REF-02).
 SPLIT_GRAD = int(os.environ.get("VAM_SPLIT_GRAD", "90"))
 SPLIT_AV_SRC = (0, 100, 1080, 1600)   # janela do avatar (x,y,w,h): cabeca + peito + micro
+V2L_MOLDURAS = str(_EST / "molduras")   # PNGs de moldura, cacheados
 
 
 def _split_avatar(s, d):
@@ -361,6 +362,65 @@ def _crop_conteudo(src, alvo_w, alvo_h, crop_dims=None):
             f":'clip((in_h*{fy:.4f})-(out_h/2),0,in_h-out_h)'")
 
 
+_CACHE_ASPECTO = {}
+
+
+def _aspecto(src):
+    """Aspecto do asset, medido por ffprobe. Cacheado."""
+    if src not in _CACHE_ASPECTO:
+        r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                            "-show_entries", "stream=width,height",
+                            "-of", "csv=p=0:s=x", src],
+                           capture_output=True, text=True)
+        try:
+            w, h = [int(v) for v in r.stdout.strip().split("x")[:2]]
+            _CACHE_ASPECTO[src] = w / h
+        except Exception:
+            _CACHE_ASPECTO[src] = 16 / 9
+    return _CACHE_ASPECTO[src]
+
+
+def _fg_painel_mockup(src, expo=""):
+    """Painel de cima com o asset INTEIRO dentro de uma moldura de navegador.
+
+    Ordem do Julio (26/08/2026), depois de reprovar o jh13 e de me ver teorizando
+    sobre onde recortar:
+
+        "e so colocar ele dentro de algum mockup que caiba na tela, e muito simples.
+         E melhor do que voce ficar raciocinando 'aonde que eu posiciono o video pra
+         aparecer o que precisa', sendo que O VIDEO TODO QUE APARECE NO VIDEO E O QUE
+         PRECISA."
+
+    Isso encerra a decisao de enquadramento: nao existe janela a escolher. O quadro
+    inteiro entra, e a moldura faz o formato horizontal parecer intencional em vez de
+    sobra. A moldura nasce no ASPECTO DO ASSET (`moldura.py`), entao o video preenche
+    a janela exatamente e nao existe vao morto la dentro.
+
+    O `crop` declarado no inserts.json e IGNORADO aqui, de proposito: era ele que
+    derrubava a medicao do arquivo e jogava o motor em `preencher`, ampliando 1,5x a
+    2,4x e decapitando as linhas (medido no jh13: crops de aspecto 1.10 e ate 0.72
+    sobre fontes 16:9, descartando de 31% a 60% da area).
+    """
+    import moldura
+    asp = _aspecto(src)
+    nome = f"moldura_{asp:.4f}.png".replace(".", "_", 1)
+    destino = os.path.join(V2L_MOLDURAS, nome)
+    if not os.path.exists(destino):
+        moldura.png_navegador(asp, destino)
+    m = moldura.medidas(asp)
+    jw, jh = m["janela_w"], m["janela_h"]
+    cw, ch = m["canvas_w"], m["canvas_h"]
+    vx, vy = m["video_x"], m["video_y"]
+    print(f"  [mockup] {os.path.basename(src)}: aspecto {asp:.2f} -> janela {jw}x{jh}, "
+          f"card {m['card_w']}x{m['card_h']} (asset INTEIRO, sem recorte)", flush=True)
+    png = destino.replace("\\", "/").replace(":", "\\:")
+    return (f"[t2]{expo}scale={jw}:{jh},setsar=1[tvid];"
+            f"color=black@0:s={cw}x{ch}:r={FPS},format=rgba,setsar=1[tcv];"
+            f"[tcv][tvid]overlay={vx}:{vy}:shortest=1[tcard];"
+            f"movie={png},format=rgba,setsar=1[tmold];"
+            f"[tcard][tmold]overlay=0:0[tfg];")
+
+
 def _fg_painel(src, alvo_w, alvo_h, expo="", crop_dims=None):
     """Filtro do painel de cima: PREENCHE ou ENCAIXA, conforme a perda MEDIDA.
 
@@ -369,6 +429,8 @@ def _fg_painel(src, alvo_w, alvo_h, expo="", crop_dims=None):
     preserva o asset inteiro e o fundo desfocado do proprio asset preenche a sobra, que
     e o tratamento que a referencia da Jheni usa. A decisao sai da medida, nao de mim:
     perda acima de PERDA_MAX no medir_enquadramento devolve modo "encaixar".
+
+    NOTA (26/08/2026): no SPLIT este caminho nao e mais usado. Ver `_fg_painel_mockup`.
     """
     if crop_dims:
         # perda ao PREENCHER o painel com a janela recortada, calculada direto do aspecto
@@ -431,7 +493,11 @@ def r_split_tela(cfg, text, s, e, out, wt=None):
           # gravacao de tela tem o assunto fora do meio (lista de skills a esquerda,
           # conversa do Claude a esquerda) e recortar pelo meio cortava justamente o
           # que a fala descrevia. Ver _crop_conteudo() e medir_enquadramento.py.
-          + _fg_painel(src, W, SPLIT_TOP_H, _eq_exposicao(cfg), _cropd) +
+          # MOCKUP (26/08/2026): o asset entra INTEIRO dentro de uma moldura de
+          # navegador, em vez de o motor escolher que pedaco mostrar. Ordem do Julio:
+          # "o video todo que aparece no video e o que precisa". O `crop` declarado
+          # deixa de valer no split, e era ele que causava a ampliacao de 1,5x a 2,4x.
+          + _fg_painel_mockup(src, _eq_exposicao(cfg)) +
           f"[tbg][tfg]overlay=(W-w)/2:(H-h)/2,setsar=1[top];"
           + _split_avatar(s, d) +
           f"color={DARK}:s={W}x{H}:r={FPS}[cv];"

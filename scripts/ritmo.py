@@ -32,7 +32,12 @@ MIN_PLANO = 1.5      # abaixo disso o corte vira nervosismo, nao ritmo
 # fica abaixo disto em footage (~2,7s entregues a 1,35x): gravacao de tela e pagina
 # precisam ser LIDAS, e a leva tinha 9 fatias abaixo de 2,6s entregues.
 TELA_MIN = 3.6
-FATOR_CORTE = 1.7    # so subdivide bloco acima de ALVO * isso
+FATOR_CORTE = 1.7
+
+# Teto de visitas ao MESMO asset dentro de um bloco. Ver o comentario longo no caminho
+# de insert: com `derivar_recortes` neutralizada, a terceira visita mostra exatamente o
+# mesmo quadro e o corte nem registra na deteccao de cena.
+MAX_VISITAS = 2    # so subdivide bloco acima de ALVO * isso
 # escalas base dos sub-planos de avatar. HISTORIA: 1.14/1.28 foram escolhidos achando
 # que o salto registraria como corte; a medicao de 18/08 provou que NAO registra (0,16
 # a 0,23 contra limiar 0,30) e o corte real vem da alternancia de conteudo. O punch
@@ -215,7 +220,24 @@ def plano_de_ritmo(blocos):
             # tela no mesmo passo do avatar (~2,8s footage) e o Julio pegou 9 fatias
             # ilegiveis. Agora: fatias de tela >= TELA_MIN, respiros de rosto entre
             # elas (>= MIN_PLANO), e a fonte segue correndo por tras (fonte_off).
+            # TETO DE VISITAS (26/08/2026, o Julio reprovando o jh13: "estao durando
+            # muito pouco, nao da nem pra ver direito"). A duracao nao era o problema:
+            # nenhuma fatia do jh13 ficou abaixo de 2,91s de tela, mediana 3,19s. O
+            # problema era VISITA REPETIDA. Nos blocos b06 e b14 o mesmo asset foi
+            # picado em TRES fatias, todas com o mesmo recorte (`derivar_recortes` esta
+            # neutralizada desde 19/08), com respiros de rosto de 1,2s no meio. O
+            # espectador perde a tela e volta no meio da acao, tres vezes.
+            #
+            # E o pior: metade desses cortes NAO EXISTE. Comparando o plano com a
+            # deteccao de cena no arquivo entregue, 19 dos 38 cortes planejados nao
+            # registram. Fatia com mesmo asset e mesmo recorte muda zero pixel: paga-se
+            # o custo de leitura e nao vem ritmo nenhum.
+            #
+            # Com o recorte derivado desligado, mais de duas visitas nao tem como
+            # entregar informacao nova. Duas ainda dao respiro pro rosto; tres viram
+            # soluco.
             n_t = max(1, int(dur // (TELA_MIN + MIN_PLANO)))
+            n_t = min(n_t, MAX_VISITAS)
             m = n_t - 1 if n_t > 1 else (1 if dur - TELA_MIN >= MIN_PLANO else 0)
             f_rosto = MIN_PLANO * 1.3 if m else 0.0
             f_tela = (dur - m * f_rosto) / max(n_t, 1)
