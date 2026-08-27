@@ -376,8 +376,15 @@ def gate(ad, fmt="9x16"):
             # anuncio esta em tela dividida, e a caixa de rosto HERDADA de um plano de
             # tela cheia continua valendo no painel do insert. Foi assim que o jh13
             # reprovou com o lettering "colidindo" com uma ampulheta de areia ambar.
-            _rit = sorted(V1.glob(f"output/{pref}{ad}v2_*_footage_1x_ritmo.json"),
-                          key=lambda p: p.stat().st_mtime)
+            # PREFERIR AS JANELAS DO gen_ad_v2 (27/08/2026): o plano de ritmo cru marca
+            # `layout=split` em toda fatia de insert, inclusive nas que a footage
+            # renderiza em tela cheia porque o config nao tem `split: true`. Quem cruza
+            # as duas fontes e o gen_ad_v2, e e o arquivo dele que vale.
+            _rit = sorted((V2L).glob(f"render-{pref}{ad}v2-*-ovl/janelas_split.json"),
+                          key=lambda q: q.stat().st_mtime)
+            if not _rit:
+                _rit = sorted(V1.glob(f"output/{pref}{ad}v2_*_footage_1x_ritmo.json"),
+                              key=lambda p: p.stat().st_mtime)
             if _rit:
                 from build_composite import ACCEL as _acc
                 cmd += ["--ritmo", str(_rit[-1]), "--accel", str(_acc)]
@@ -387,6 +394,14 @@ def gate(ad, fmt="9x16"):
             # 1,7s e cabe inteira entre duas amostras de 1,5s. Gate que amostra grosso
             # entrega "PASSA" que nao prova nada.
             cmd += ["--intervalo", "0.5"]
+            # a0: o composite desloca a footage com `setpts=PTS-a0/TB`. Sem passar isso,
+            # o gate compara quadro de video com legenda de outro instante.
+            _tj = V1 / "output" / "timing.json"
+            if _tj.exists():
+                try:
+                    cmd += ["--a0", str(json.loads(_tj.read_text()).get("a0", 0.0))]
+                except Exception:
+                    pass
             rc = subprocess.run(cmd, capture_output=True, text=True)
             print(rc.stdout, flush=True)
             if rc.returncode != 0:

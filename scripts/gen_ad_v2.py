@@ -484,7 +484,26 @@ def main(cfg_path):
     # (calibrada pro plano medio) raspa o queixo e o gate de colisao reprova
     # (jh14 t=18s, 1,8% do rosto mesmo com punch discreto). No rodape ela cai
     # sobre a camiseta/mic e nunca disputa com o rosto.
-    if "oficial_13" in str(cfg.get("avatar", "")) or "_of13" in str(cfg.get("avatar", "")):
+    # MEDIDO, NAO PELO NOME DO LOOK (27/08/2026). A regra existia so pra `oficial_13`,
+    # escrita a mao, e o `espuma_roxa` e igualmente fechado: em t=16,5s a legenda
+    # "skill e essa" pousou na barba do Thales, 6,6% do rosto, com o queixo em y1390 e a
+    # tinta em y1275-1340. Nome de look nao e criterio: o enquadramento e.
+    # `medir_rosto` da a caixa no proprio avatar; queixo abaixo de 60% da altura do
+    # quadro significa que nao sobra peito pra posicao padrao da legenda.
+    _fechado = False
+    try:
+        import medir_rosto as _mr
+        _cx = _mr.caixa_rosto(str(cfg.get("avatar", "")))
+        if _cx:
+            _fim = (_cx[0] + _cx[1]) / 1920.0
+            _fechado = _fim > 0.60
+            print(f"   [look] queixo do avatar em {_fim:.0%} da altura -> "
+                  f"{'FECHADO, legenda no rodape' if _fechado else 'aberto, legenda padrao'}",
+                  flush=True)
+    except Exception as _e:
+        print(f"   [look] nao consegui medir o avatar ({_e}); caindo no nome do look",
+              flush=True)
+    if _fechado or "oficial_13" in str(cfg.get("avatar", "")) or "_of13" in str(cfg.get("avatar", "")):
         n = 0
         for g in groups:
             if not g.get("costura") and not g.get("baixa"):
@@ -519,8 +538,28 @@ def main(cfg_path):
                         _saida.append(_f); continue
                     _ini = [w for w in _f["words"] if (w["start"] + w["end"]) / 2 < _b]
                     _fim = [w for w in _f["words"] if (w["start"] + w["end"]) / 2 >= _b]
-                    if not _ini or not _fim:      # a fronteira nao separa palavra nenhuma
-                        _saida.append(_f); continue
+                    if not _ini or not _fim:
+                        # NAO DA PRA CORTAR: o grupo tem uma palavra so, ou todas caem
+                        # do mesmo lado. Entao APARA em vez de deixar atravessar.
+                        # Medido no jh13: "publicacao" sozinho, 108,40 a 109,20, ficava
+                        # 57,5% dentro do split. Abaixo dos 60% levava a posicao do
+                        # avatar cheio (tinta y1415-1494) pra cima do rosto do painel de
+                        # baixo (y1259-1887): 5,6% de cobertura em t=80,0s.
+                        # As duas posicoes machucam nesse caso (a costura cai no rosto
+                        # do avatar cheio, a baixa cai no rosto do split), entao a saida
+                        # nao e escolher: e a palavra ficar menos tempo na tela, inteira
+                        # de um lado so.
+                        _antes = _b - _f["start"]
+                        _depois = _f["end"] - _b
+                        if _antes >= _depois and _antes >= 0.30:
+                            _saida.append({**_f, "end": round(_b - 0.02, 3)})
+                            _cortados += 1
+                        elif _depois > _antes and _depois >= 0.30:
+                            _saida.append({**_f, "start": round(_b + 0.02, 3)})
+                            _cortados += 1
+                        else:
+                            _saida.append(_f)
+                        continue
                     _saida.append({**_f, "words": _ini, "start": _f["start"],
                                    "end": round(_ini[-1]["end"], 3)})
                     _saida.append({**_f, "words": _fim, "start": round(_fim[0]["start"], 3),
@@ -942,6 +981,16 @@ def main(cfg_path):
         "vao_sem_texto": {"maior": round(float(_pior), 2), "em": round(float(_quando), 2)},
     }
     (out / "prancha.json").write_text(json.dumps(_prancha, ensure_ascii=False, indent=2))
+    # UMA VERDADE SO SOBRE ONDE HA SPLIT (27/08/2026). O `ritmo.py` marca `layout` em
+    # TODA fatia de insert, mas a footage so honra isso quando o config do insert tem
+    # `split: true`; sem a flag ela renderiza tela cheia. Quem sabe disso e este motor,
+    # que le as duas coisas, e nao o plano de ritmo cru.
+    # O gate de colisao estava lendo o plano cru e por isso acusava 14 colisoes em
+    # trechos que a tela mostra como insert em tela cheia, sem apresentador nenhum:
+    # falso positivo com a mesma cara de defeito real. Aqui saem as janelas de verdade.
+    (out / "janelas_split.json").write_text(json.dumps(
+        {"segs": [{"s": a_, "e": b_, "layout": "split"} for a_, b_ in janelas_split]},
+        ensure_ascii=False, indent=2))
     (out / "index.html").write_text(html)
     print(f"[{ad} {look}] total={total}s | {len(brolls)} brolls | {len(letts)} letterings | "
           f"{len(groups)} grupos de legenda | CTA {cta_s}s | wipes {wipes}")
