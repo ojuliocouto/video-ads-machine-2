@@ -337,31 +337,6 @@ def main(cfg_path):
         # split ele mora na metade de baixo do quadro, e o lettering centrado pousa
         # exatamente no rosto dele (medido no AD21: "SKILLS DO ZERO" em cima da cara).
         no_split = any(a <= t0 < b for a, b in janelas_split)
-        # NAO ATRAVESSAR TROCA DE LAYOUT (27/08/2026). A posicao do lettering e escolhida
-        # pelo layout do INICIO dele, e ele continua na tela por 2s: se o quadro vira
-        # split no meio, a posicao calibrada pra tela cheia (tinta y1420-1660) cai no
-        # rosto do painel de baixo, que naquele enquadramento comeca em y1278.
-        # Foi a colisao medida em t=7,5s do jh13, 5,1% da caixa do rosto: o lettering
-        # nasceu em 6,7s sobre avatar cheio e o corte pro split aconteceu embaixo dele.
-        # Nao existe faixa que sirva pros dois layouts (o rosto anda de y577 a y1278 ao
-        # longo do anuncio), entao a saida nao e escolher melhor: e nao atravessar.
-        for _a, _b in janelas_split:
-            _borda = _a if (t0 < _a < t0 + dur_l) else (_b if t0 < _b < t0 + dur_l else None)
-            if _borda is not None:
-                _novo = round(_borda - t0 - 0.08, 2)
-                if _novo >= 1.20:
-                    print(f"   [layout] lettering '{L['key'][:26]}' encurtado de "
-                          f"{dur_l:.2f}s pra {_novo:.2f}s: o quadro troca de layout em "
-                          f"{_borda:.2f}s", flush=True)
-                    dur_l = _novo
-                else:
-                    # curto demais pra caber antes da troca: nasce DEPOIS dela
-                    print(f"   [layout] lettering '{L['key'][:26]}' adiado de {t0:.2f}s "
-                          f"pra {_borda + 0.08:.2f}s: nao cabe antes da troca de layout",
-                          flush=True)
-                    t0 = round(_borda + 0.08, 2)
-                    no_split = any(a <= t0 < b for a, b in janelas_split)
-                break
         # LOGO DA OCC junto do lettering, quando o roteiro pede (bloco marcado com
         # "+ logo da occ"). O diretor de arte reprovou o jh13 porque o bloco 14 pede
         # lettering E logo e a tela nao mostrava nenhum dos dois. O lettering ja e um
@@ -395,6 +370,37 @@ def main(cfg_path):
         base["dur"] = round(max(base["start"] + base["dur"],
                                 l["start"] + l["dur"]) - base["start"], 2)
     letts = _ordem
+    # NAO ATRAVESSAR TROCA DE LAYOUT (27/08/2026, segunda passada, DEPOIS da fusao).
+    # A primeira versao rodava dentro do laco de letterings, e a fusao da pilha logo
+    # abaixo recalculava `base["dur"]` a partir da ultima linha, apagando o corte. O
+    # resultado foi o `lettC` ("ENQUANTO ISSO") ficar 1,7s em cima da cara do Thales
+    # (t=60,0s a 61,7s, 9,2% a 13,1% do nucleo do rosto), e o gate nao pegou porque o
+    # proprio texto em cima da cara quebra o detector: 1,27s sem NENHUMA deteccao,
+    # justamente ali. Ponto cego que a referencia ja documentava.
+    # Aqui a trava roda uma vez so, no bloco que de fato vai pra tela.
+    for l in letts:
+        for _a, _b in janelas_split:
+            _borda = (_a if l["start"] < _a < l["start"] + l["dur"]
+                      else (_b if l["start"] < _b < l["start"] + l["dur"] else None))
+            if _borda is None:
+                continue
+            _novo = round(_borda - l["start"] - 0.10, 2)
+            if _novo >= 1.20:
+                print(f"   [layout] lettering '{l['key'][:26]}' encurtado de "
+                      f"{l['dur']:.2f}s pra {_novo:.2f}s: o quadro troca de layout em "
+                      f"{_borda:.2f}s", flush=True)
+                l["dur"] = _novo
+            else:
+                _novo_t0 = round(_borda + 0.10, 2)
+                print(f"   [layout] lettering '{l['key'][:26]}' adiado de {l['start']:.2f}s "
+                      f"pra {_novo_t0:.2f}s: nao cabe antes da troca", flush=True)
+                l["dur"] = round(l["dur"] - (_novo_t0 - l["start"]), 2)
+                l["start"] = _novo_t0
+                if l.get("linhas"):
+                    l["linhas"] = [{**x, "delay": max(0.0, round(x["delay"]
+                                    - (_novo_t0 - l["start"]), 2))} for x in l["linhas"]]
+            l["split"] = any(x <= l["start"] < y for x, y in janelas_split)
+            break
     for l in letts:
         if l.get("linhas"):
             print(f"   [pilha] {l['id']}: {len(l['linhas'])} linhas, "

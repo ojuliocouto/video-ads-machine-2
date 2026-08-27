@@ -381,6 +381,12 @@ def gate(ad, fmt="9x16"):
             if _rit:
                 from build_composite import ACCEL as _acc
                 cmd += ["--ritmo", str(_rit[-1]), "--accel", str(_acc)]
+            # AMOSTRA MAIS FINA (27/08/2026). O padrao de 1,5s da 61 amostras em 90s e
+            # perdeu TODAS as colisoes que os dois auditores acharam na mao: o mesmo
+            # arquivo, mesmo comando, com 0,25s acusa 69. Uma colisao de lettering dura
+            # 1,7s e cabe inteira entre duas amostras de 1,5s. Gate que amostra grosso
+            # entrega "PASSA" que nao prova nada.
+            cmd += ["--intervalo", "0.5"]
             rc = subprocess.run(cmd, capture_output=True, text=True)
             print(rc.stdout, flush=True)
             if rc.returncode != 0:

@@ -655,6 +655,33 @@ def _pular_preto(src, st, dur_take):
     _PRETO_CACHE[chave] = novo_st
     return novo_st
 
+ALVO_BG_CHEIO = 30.0     # luminancia alvo do fundo desfocado, de 0 a 255
+
+
+def _bg_offset(src, cfg):
+    """Quanto clarear ou escurecer o fundo desfocado do insert em tela cheia.
+
+    OFFSET FIXO ZERAVA O QUADRO (27/08/2026). Estava em `brightness=-0.40`, que e -102
+    niveis: num asset de luminancia 33 (cinco dos dez do jh13 estao entre 33 e 64) isso
+    nao escurece, ZERA. O diretor de arte mediu 11,07s do anuncio, 12,3%, com 60% a 67%
+    do quadro em preto absoluto, e um dos trechos e t=3,17 a 6,60s, dentro da janela que
+    decide o scroll. O conserto declarado ("congelado, desfoque 60, brilho -0,40") nao
+    mudava um pixel do que se via: era o preto chapado de novo, por outro caminho.
+
+    Fixo nao serve porque o material varia de 33 a 244 de luminancia. Aqui o alvo e
+    medido: o fundo pousa em ~30/255, escuro o bastante pra nao competir com o card e
+    claro o bastante pra ler como cenario em vez de buraco.
+    """
+    lum = _luminancia_fonte(src, float(cfg.get("start", 0) or 0))
+    if lum is None:
+        return -0.20
+    # o boxblur nao muda a media, entao a conta vale sobre a luminancia da fonte
+    off = max(-0.40, min(0.16, (ALVO_BG_CHEIO - lum) / 255.0))
+    print(f"  [fundo cheio] {os.path.basename(src)}: fonte em {lum:.0f}/255, "
+          f"offset {off:+.3f} (alvo {ALVO_BG_CHEIO:.0f})", flush=True)
+    return off
+
+
 def r_insert_moldura(cfg, text, s, e, out, wt=None):
     """Insert em TELA CHEIA com a mesma moldura de navegador do split.
 
@@ -717,7 +744,8 @@ def r_insert_moldura(cfg, text, s, e, out, wt=None):
     fc = (f"[0:v]setpts=PTS/{sp},tpad=stop_mode=clone:stop_duration=4,split=2[t1][t2];"
           f"[t1]trim=end_frame=1,loop=loop=-1:size=1:start=0,setpts=N/{FPS}/TB,"
           f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-          f"boxblur=60:2,eq=brightness=-0.40:saturation=0.7,setsar=1[bg];"
+          f"boxblur=60:2,eq=brightness={_bg_offset(src, cfg):.3f}:saturation=0.7,"
+          f"setsar=1[bg];"
           f"[t2]{_eq_exposicao(cfg)}scale={jw}:{jh},setsar=1[vid];"
           f"color=black@0:s={cw}x{ch}:r={FPS},format=rgba,setsar=1[cv];"
           f"[cv][vid]overlay={vx}:{vy}:shortest=1[card];"

@@ -128,8 +128,19 @@
          e a coluna de curtir/comentar do Reels comeca em x940. */
       .lett { position:absolute; inset:0; z-index:34; pointer-events:none;
         display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
-        gap:6px; padding:0 140px 260px;
-        background:radial-gradient(78% 30% at 50% 70%, rgba(0,0,0,.90) 0%, rgba(0,0,0,.62) 46%, transparent 78%); }
+        gap:6px; padding:0 170px 260px;
+        /* SCRIM ORFAO, QUINTA VEZ (27/08/2026). Desci o texto desta classe de 560px
+           pra 260px do rodape e recalibrei o degrade de `.lett-split` (54%),
+           `.lett-baixo` (83%) e `.lett-pilha` (76%). A CLASSE BASE ficou com o valor
+           velho, dentro do MESMO commit que consertou os outros ramos.
+           O estrategista mediu o estrago: mancha preta de 628px de altura com alpha
+           229, centro em y1344 enquanto a tinta comeca em y1452, ou seja o ponto mais
+           forte da sombra fica ACIMA do texto, no queixo. Cobre 33,8% da caixa do
+           rosto, tira 44 niveis de luz do peito, e vale por 24,0s dos 90,07s do
+           anuncio, o CTA inteiro incluso. E exatamente a sombra que a Jheni reprovou:
+           "me da panico, deixa esteticamente pobre".
+           Tinta em y1420-1660, centro ~y1540 = 80% da altura. Raio 22% como os irmaos. */
+        background:radial-gradient(86% 22% at 50% 80%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
       /* TELA DIVIDIDA: o insert ocupa y0-980 e o Thales y980-1920. O lettering padrao
          (560px do rodape, ou seja ~y1360) cai bem na altura do rosto dele. Aqui ele desce
          pro peito/microfone, que e a unica faixa livre entre a tela e a legenda, e o scrim
@@ -147,7 +158,7 @@
          Agora usa a MESMA faixa que a legenda da costura ja provou segura (glifos em
          y1792-1853): 40px do rodape com fonte menor, o unico jeito de caber sob o
          queixo sem entrar na UI do Reels. */
-      .lett.lett-split { padding:0 140px 790px;
+      .lett.lett-split { padding:0 170px 790px;
         /* O SCRIM ACOMPANHA O TEXTO (27/08/2026). Subi o lettering pra cima da
            costura e deixei o degrade em 92% da altura: virou uma mancha preta
            solta no rodape, longe do texto que ela deveria apoiar. Medido no MOV
@@ -162,7 +173,7 @@
       /* SAIU DA UI (27/08/2026): 190px punha a tinta terminando em y1730, ou seja
          DENTRO da faixa que o Reels cobre com botao e descricao. 250px com a fonte da
          costura (58px) fecha em y1670, sob o queixo e acima do rodape do app. */
-      .lett.lett-baixo { padding:0 140px 250px;
+      .lett.lett-baixo { padding:0 170px 250px;
         background:radial-gradient(86% 22% at 50% 83%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
       .lett.lett-baixo .key { font-size:58px; line-height:1.10; }
       /* PILHA: lista que acumula. Sans em vez do serif italico porque isto e uma LISTA
@@ -172,8 +183,14 @@
          linhas caiam dentro do painel do avatar (testa, olhos e nariz, t=60,3s).
          Quando desci `.lett` de 560 pra 260 eu mexi em tres variantes e deixei
          esta: quarta vez no mesmo dia que emendo um ramo so. */
-      .lett.lett-pilha { padding:0 140px 250px; align-items:flex-start;
+      .lett.lett-pilha { padding:0 170px 250px; align-items:flex-start;
         background:radial-gradient(84% 26% at 50% 76%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
+      /* PILHA DENTRO DE SPLIT (27/08/2026). `.lett.lett-pilha` e `.lett.lett-split`
+         tem a MESMA especificidade (0,0,2,0) e a pilha vem depois, entao ela vencia
+         e usava os 250px do avatar em tela cheia mesmo quando o quadro era split.
+         Sem esta regra, uma pilha que NASCA dentro de um split repete o defeito com
+         o flag certo: o CSS desfaz o conserto do Python. */
+      .lett.lett-split.lett-pilha { padding:0 170px 790px; }
       .lett.lett-pilha .key { font-family:"Inter"; font-style:normal; font-weight:600;
         font-size:54px; line-height:1.30; text-align:left; letter-spacing:-.2px;
         text-shadow:0 4px 22px rgba(0,0,0,.85);
@@ -397,7 +414,11 @@
       /* scrim: da contraste pro CTA e pro logo sobre a camiseta clara do apresentador
          (contraste medido antes: ~1.3:1, ilegivel). Estende pra baixo pra pegar o logo. */
       #cta::before { content:''; position:absolute; left:-40px; right:-40px;
-        top:-140px; bottom:-430px; z-index:-1; pointer-events:none;
+        /* PREMISSA MORTA (27/08/2026). O comentario original justificava o -430px
+           com "a camiseta CLARA do apresentador". Neste look ele esta de camiseta
+           PRETA nos 90 segundos, entao o scrim so escurece o fecho do anuncio: o
+           estrategista mediu 380px de preto por baixo do botao no CTA inteiro. */
+        top:-140px; bottom:-160px; z-index:-1; pointer-events:none;
         background:radial-gradient(64% 48% at 50% 58%, rgba(4,5,10,.80) 0%, rgba(4,5,10,.46) 56%, rgba(4,5,10,0) 84%); }
       /* seta em CSS puro: o ▼ dependia de um glifo que os subsets de fonte nao
          trazem. Triangulo por borda renderiza em qualquer fonte. */
