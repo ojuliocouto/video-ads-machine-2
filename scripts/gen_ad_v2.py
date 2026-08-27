@@ -560,9 +560,18 @@ def main(cfg_path):
                         else:
                             _saida.append(_f)
                         continue
+                    # A FATIA PARA NA FRONTEIRA, NAO NO FIM DA PALAVRA (27/08/2026).
+                    # Eu cortava o grupo certo e deixava o pedaco terminar em
+                    # `_ini[-1]["end"]`, que e o fim da PALAVRA e pode passar da borda:
+                    # "publicacao" ia de 108,40 a 109,20 com o split acabando em 108,86,
+                    # entao a fatia continuava atravessando (57,5% dentro) e levava a
+                    # posicao do avatar cheio pro rosto do split. Cortar e parar na
+                    # fronteira sao a mesma coisa; fazer so metade nao resolve nada.
+                    _fim_ini = round(min(_ini[-1]["end"], _b - 0.02), 3)
+                    _ini_fim = round(max(_fim[0]["start"], _b + 0.02), 3)
                     _saida.append({**_f, "words": _ini, "start": _f["start"],
-                                   "end": round(_ini[-1]["end"], 3)})
-                    _saida.append({**_f, "words": _fim, "start": round(_fim[0]["start"], 3),
+                                   "end": _fim_ini})
+                    _saida.append({**_f, "words": _fim, "start": _ini_fim,
                                    "end": _f["end"]})
                     _cortados += 1
                 _fatias = _saida
@@ -570,6 +579,16 @@ def main(cfg_path):
         if _cortados:
             print(f"   [split] {_cortados} grupo(s) de legenda cortado(s) na fronteira de "
                   f"layout, pra nenhum atravessar o corte", flush=True)
+        # A ANTECIPACAO DO FADE-IN TAMBEM ATRAVESSA (27/08/2026). O grupo entra 0,12s
+        # antes pra cobrir a saida do anterior e matar a piscada. So que, se ele nasce
+        # logo depois de uma troca de layout, esses 0,12s aparecem AINDA no layout
+        # antigo, com a posicao do novo: "processo" comeca em 45,51 (fora do split, que
+        # acaba em 45,49) e ja estava na tela em 45,39, com a posicao de rodape em cima
+        # do rosto do painel de baixo. 5,6% de cobertura em t=33,5s.
+        # Cortar o grupo nao resolve isso: o que atravessa e a ANIMACAO, nao o grupo.
+        for g in _novos:
+            if any(abs(g["start"] - x) < 0.16 for jan in janelas_split for x in jan):
+                g["sem_lead"] = True
         groups = _novos
 
     if janelas_split:

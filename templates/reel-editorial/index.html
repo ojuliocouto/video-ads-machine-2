@@ -604,7 +604,12 @@
         // anterior entra na hora; grupo depois de pausa antecipa, que e onde a piscada
         // podia acontecer e onde nao ha ninguem pra empilhar.
         var _colado = (_fimAnterior !== null && gStart - _fimAnterior < 0.05);
-        var gIn = _colado ? gStart : Math.max(0, gStart - 0.12);
+        // `cgrp-sem-lead`: o grupo nasce a menos de 0,16s de uma troca de layout, entao
+        // os 0,12s de antecipacao apareceriam AINDA no layout antigo, com a posicao do
+        // novo. Cortar o grupo na fronteira nao resolve isso, porque o que atravessa e a
+        // ANIMACAO. Aqui ele entra na hora, sem lead.
+        var _semLead = grp.classList.contains("cgrp-sem-lead");
+        var gIn = (_colado || _semLead) ? gStart : Math.max(0, gStart - 0.12);
         _fimAnterior = gEnd;
         tl.set(grp, { visibility: "visible" }, gIn);
         tl.to(grp, { opacity: 1, duration: 0.16, ease: "power1.out" }, gIn);

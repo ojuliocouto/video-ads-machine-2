@@ -389,7 +389,7 @@ def _render_captions_html(groups: list[dict]) -> str:
             # "costura" (split) tem prioridade sobre "baixa": no split a posicao baixa
             # cai na boca do apresentador, que e o defeito que ela deveria evitar.
             f'  <div class="cgrp'
-            f'{" cgrp-costura" if group.get("costura") else (" cgrp-baixa" if group.get("baixa") else "")}" '
+            f'{" cgrp-costura" if group.get("costura") else (" cgrp-baixa" if group.get("baixa") else "")}{" cgrp-sem-lead" if group.get("sem_lead") else ""}" '
             f'data-g-start="{group["start"]:.3f}" '
             f'data-g-end="{group["end"]:.3f}">'
         )
