@@ -370,6 +370,21 @@ def main():
                 # feita). Sem isso o gate cobra duas vezes a mesma coisa e trava a leva.
                 if td == "insert" and tr == "avatar" and exc_ad.get(blocos[i]["marcador"]):
                     continue
+                # SIMETRIA (26/08/2026): o inverso tambem e caso legitimo. A Fase 2 da
+                # skill preve PROPOR insert novo onde o doc so tinha avatar, e o Julio
+                # autorizou por voz ("se o asset nao tem na galeria, vc precisa criar com
+                # o higgsfield") depois do diretor de arte medir 13,3s e 9,9s de rosto
+                # continuo, que o gate de ritmo reprova.
+                # A trava continua sendo a MESMA: sem motivo escrito no
+                # _fidelidade_excecoes.json, reprova. O que muda e so a direcao, nao o
+                # rigor. Insert ADITIVO nunca altera a copy do bloco: se a fala mudar, a
+                # divergencia aparece na comparacao de texto, que roda em separado.
+                # A chave pode ser o marcador do DOC ou `bloco:<i>`. O marcador se
+                # repete ("Thales de frente para a camera" aparece varias vezes), entao
+                # a chave posicional e a precisa: libera UM bloco, nao a categoria.
+                if td == "avatar" and tr == "insert" and (
+                        exc_ad.get(blocos[i]["marcador"]) or exc_ad.get(f"bloco:{i}")):
+                    continue
                 problemas.append(f"estrutura: bloco {i} e '{td}' no doc e '{tr}' no roteiro")
         # direcao visual com marcador de lista (❌ ✅ •) que virou texto corrido
         # o lettering do composite v2 mora no CONFIG (letterings[]), nao no roteiro:

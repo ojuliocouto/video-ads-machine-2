@@ -37,7 +37,15 @@ FATOR_CORTE = 1.7
 # Teto de visitas ao MESMO asset dentro de um bloco. Ver o comentario longo no caminho
 # de insert: com `derivar_recortes` neutralizada, a terceira visita mostra exatamente o
 # mesmo quadro e o corte nem registra na deteccao de cena.
-MAX_VISITAS = 2    # so subdivide bloco acima de ALVO * isso
+MAX_VISITAS = 2
+
+# Layout de cada visita ao mesmo asset. Com o `crop` desligado no split (26/08/2026) e
+# `derivar_recortes` neutralizada desde 19/08, duas visitas seguidas mostram o quadro
+# IDENTICO: zero pixel de diferenca, e a deteccao de cena nao ve corte nenhum. Medido no
+# jh13 v6: 17 cortes no arquivo contra 12 visitas planejadas, 75% do anuncio em plano
+# acima de 6s. Alternar o LAYOUT (tela dividida x tela cheia) troca ~60% dos pixels e
+# REGISTRA, ao contrario do punch de escala (0,16 a 0,23 contra limiar 0,30).
+LAYOUTS_INSERT = ("split", "cheio")
 # escalas base dos sub-planos de avatar. HISTORIA: 1.14/1.28 foram escolhidos achando
 # que o salto registraria como corte; a medicao de 18/08 provou que NAO registra (0,16
 # a 0,23 contra limiar 0,30) e o corte real vem da alternancia de conteudo. O punch
@@ -91,6 +99,10 @@ def plano_de_ritmo(blocos):
         s, e = float(b["s"]), float(b["e"])
         dur = e - s
         tipo = b["tipo"]
+        # layout forcado pelo chamador (resto do hook). Lido no TOPO do laco: quando
+        # ficava mais abaixo, os ramos que emitem antes dele davam
+        # UnboundLocalError, e os testes pegaram.
+        _forcado = b.get("_layout_forcado")
 
         # ABERTURA NAO ALTERNA (18/08/2026): o bloco 0 e o fundo do hook, e um
         # respiro de rosto nos primeiros segundos poe o texto de abertura na cara
@@ -105,8 +117,13 @@ def plano_de_ritmo(blocos):
             f0 = min(HOOK_JANELA, cap0) if cap0 else HOOK_JANELA
             segs.append({"bloco": i, "tipo": "insert", "s": round(s, 3),
                          "e": round(s + f0, 3), "crop": b.get("crop"),
-                         "sub": 0, "de": 1, "fonte_off": 0.0})
-            resto = {**b, "s": s + f0, "_pos_hook": True, "_off_extra": f0}
+                         "sub": 0, "de": 1, "layout": "split", "fonte_off": 0.0})
+            # O RESTO DO HOOK ALTERNA (26/08/2026). A fatia forcada da abertura e
+            # sempre split; o resto reusa a MESMA fonte, entao sem alternar os dois
+            # trechos sao o mesmo quadro e o corte nao registra. Medido no jh13: a
+            # abertura inteira, 11,93s, virava UM plano so na deteccao de cena.
+            resto = {**b, "s": s + f0, "_pos_hook": True, "_off_extra": f0,
+                     "_layout_forcado": "cheio"}
             if cap0:
                 sobra_cap = cap0 - f0
                 if sobra_cap >= MIN_PLANO:
@@ -146,6 +163,11 @@ def plano_de_ritmo(blocos):
             # recorte diferente (jump cut de reenquadre, nao conta pro ritmo mas nao
             # congela nem estoura fonte).
             alvo = max(-(-int(dur - cap) // 4) + 1, -(-int(cap) // 5), 1)
+            # O TETO VALE AQUI TAMBEM (26/08/2026). Eu tinha capado so o caminho sem
+            # `dur_max`, e os blocos 6 e 14 do jh13, que TEM cap, seguiram com 3 visitas
+            # de ~3s: exatamente a queixa que o teto existia pra resolver. O diretor de
+            # arte pegou na auditoria seguinte. Cap aplicado num ramo so nao e cap.
+            alvo = min(alvo, MAX_VISITAS)
             escolha = None
             for n_t in range(alvo, 0, -1):
                 f_tela = cap / n_t
@@ -175,7 +197,7 @@ def plano_de_ritmo(blocos):
             if not escolha:
                 # nada fecha com respiro: fatias emendadas cobrindo o bloco, cada uma
                 # dentro da fonte (reuso por recorte); e melhor que congelar a cauda
-                n_t = max(2, -(-int(dur) // 5))
+                n_t = min(max(2, -(-int(dur) // 5)), MAX_VISITAS)
                 f_tela = dur / n_t
                 while f_tela > cap and n_t < 12:
                     n_t += 1
@@ -194,6 +216,7 @@ def plano_de_ritmo(blocos):
                              "s": round(t, 3), "e": round(t + f_tela, 3),
                              "crop": recortes[k % len(recortes)],
                              "sub": 2 * k, "de": 2 * n_t,
+                             "layout": _forcado or LAYOUTS_INSERT[k % len(LAYOUTS_INSERT)],
                              # _off_extra: pedaco pos-hook le a fonte DEPOIS da
                              # fatia forcada da abertura
                              "fonte_off": round(off + float(b.get("_off_extra", 0)), 3)})
@@ -208,11 +231,14 @@ def plano_de_ritmo(blocos):
             assert all(x["e"] > x["s"] for x in segs if x["bloco"] == i), \
                 f"bloco {i}: plano invertido (dur={dur:.1f} cap={cap:.1f})"
             continue
-
         n = _n_planos(dur)
         if n == 1:
             segs.append({"bloco": i, "tipo": tipo, "s": s, "e": e,
-                         "crop": b.get("crop"), "sub": 0, "de": 1})
+                         "crop": b.get("crop"), "sub": 0, "de": 1,
+                         # visita UNICA tambem precisa de layout: era por aqui que o
+                         # resto do hook saia com layout=None e a abertura do jh13
+                         # virava um plano so de 11,93s na deteccao de cena.
+                         **({"layout": _forcado} if _forcado and tipo == "insert" else {})})
             continue
 
         if tipo == "insert":
@@ -249,6 +275,7 @@ def plano_de_ritmo(blocos):
                              "s": round(t2, 3), "e": round(t2 + f_tela, 3),
                              "crop": recortes[k % len(recortes)],
                              "sub": 2 * k, "de": 2 * n_t,
+                             "layout": _forcado or LAYOUTS_INSERT[k % len(LAYOUTS_INSERT)],
                              "fonte_off": round(off, 3)})
                 off += f_tela
                 t2 += f_tela

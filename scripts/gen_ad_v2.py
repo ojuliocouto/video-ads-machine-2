@@ -741,6 +741,15 @@ def main(cfg_path):
         print("   [cta] sem o lead 'toca em': so pill + logo", flush=True)
     html = html.replace('<div data-hf-id="hf-wto1" class="pill" id="cta-pill">saiba mais</div>',
                         f'<div data-hf-id="hf-wto1" class="pill" id="cta-pill">{cfg.get("cta_label","saiba mais")}</div>')
+    # O CTA precisa saber se nasce em cima de tela dividida (ver .cta-split no template).
+    # `janelas_split` ja existe aqui pra legenda e pro lettering; o CTA era o unico dos
+    # tres que nao consultava, e por isso pousava no rosto quando o ultimo bloco era split.
+    _cta_no_split = any(a <= cta_s < b for a, b in janelas_split)
+    if _cta_no_split:
+        print(f"   [cta] {cta_s:.2f}s cai em tela dividida: descendo o CTA e o logo "
+              f"(senao pousam no rosto)", flush=True)
+        html = html.replace('id="cta" class="clip"', 'id="cta" class="clip cta-split"', 1)
+        html = html.replace('id="ev-logo" class="clip"', 'id="ev-logo" class="clip logo-split"', 1)
     html = html.replace('data-start="50.4" data-duration="4.96" data-track-index="46"',
                         f'data-start="{cta_s}" data-duration="{round(total-cta_s,2)}" data-track-index="46"')
     html = html.replace('data-start="46.7" data-duration="8.68" data-track-index="48"',

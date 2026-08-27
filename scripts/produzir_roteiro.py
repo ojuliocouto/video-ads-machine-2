@@ -295,6 +295,31 @@ def _split_avatar(s, d):
 _CACHE_CONTEUDO = {}
 
 
+ALVO_LUM = 105.0     # luminancia media alvo do painel; os inserts bons caem entre 83 e 100
+EXPO_MAX = 0.45     # teto: acima disso a fonte escura vira cinza lavado
+_CACHE_LUM = {}
+
+
+def _luminancia_fonte(src, start=0.0):
+    """Luminancia media da fonte, medida num quadro. Cacheada. None se falhar."""
+    if src in _CACHE_LUM:
+        return _CACHE_LUM[src]
+    val = None
+    try:
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            q = os.path.join(td, "l.png")
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(start + 1.5),
+                            "-i", src, "-frames:v", "1", q], capture_output=True, timeout=60)
+            if os.path.exists(q):
+                im = Image.open(q).convert("L")
+                val = sum(im.getdata()) / (im.width * im.height)
+    except Exception:
+        val = None
+    _CACHE_LUM[src] = val
+    return val
+
+
 def _eq_exposicao(cfg):
     """Filtro de exposicao por insert, vindo do campo `exposicao` do inserts.json.
 
@@ -303,8 +328,27 @@ def _eq_exposicao(cfg):
     de 255. Os primeiros 11,5s do anuncio ficavam quase pretos, que e exatamente a janela
     que decide retencao no Reels. Clarear e tratamento de exposicao, nao troca de asset:
     o asset marcado pela Brigida continua o mesmo.
+
+    PISO AUTOMATICO (26/08/2026). Depender de alguem acertar `exposicao` na mao nao
+    funcionou: o estrategista reprovou o jh13 com dois inserts ilegiveis, e medindo o
+    painel de cima no arquivo entregue eles davam luminancia media 17,5 e 2,1 numa
+    escala de 255 (p90 ZERO no segundo: 90% do painel era preto puro). As fontes tinham
+    43 a 51 de luminancia e `exposicao` declarada de 0,06 a 0,10, insuficiente.
+
+    Agora o motor MEDE a fonte e calcula o piso pra o painel cair na faixa em que os
+    inserts bons ja caem (83 a 100 de media, medido nos cinco que passaram). O valor
+    declarado no JSON continua valendo como MINIMO: quem quiser clarear mais, clareia.
     """
     ex = float(cfg.get("exposicao", 0) or 0)
+    src = cfg.get("file")
+    if src:
+        lum = _luminancia_fonte(src, float(cfg.get("start", 0) or 0))
+        if lum is not None and lum < ALVO_LUM:
+            piso = min((ALVO_LUM - lum) / 255.0, EXPO_MAX)
+            if piso > ex:
+                print(f"  [exposicao] {os.path.basename(src)}: fonte em {lum:.0f}/255, "
+                      f"subindo de {ex:.2f} para {piso:.2f} (alvo {ALVO_LUM})", flush=True)
+                ex = piso
     if abs(ex) < 0.005:
         return ""
     return f"eq=brightness={ex:.3f}:contrast={1 + ex * 0.6:.3f},"
@@ -477,8 +521,17 @@ def r_split_tela(cfg, text, s, e, out, wt=None):
     ass = caption_ass(text, s, d, wt, cy=1700)
     # recorte da tela pro painel de cima. Sem isso, um 1080x1920 entraria pela largura e
     # so 50% dele apareceria; com ele eu escolho QUAL pedaco da tela vale a pena mostrar.
+    # CROP FORA DE VERDADE NO SPLIT (26/08/2026, segunda passada). Na primeira eu tirei
+    # o `crop` so do CALCULO DO MODO e ele continuou sendo APLICADO na fonte: a moldura
+    # passou a garantir a janela inteira, mas o conteudo seguia decapitado antes de
+    # entrar nela. O diretor de arte mediu e cinco inserts ainda descartavam de 31% a
+    # 60% da largura, com linha do Cloudflare cortada e headline pela metade.
+    # Meia correcao nao corrige: aqui o `crop` nao entra no filtro.
     _cropf, _cropd = _crop_fonte(cfg)
-    topsrc = f"[0:v]{_cropf}"
+    if _cropf:
+        print(f"  [split] ignorando crop declarado {_cropd}: no mockup o quadro entra "
+              f"INTEIRO", flush=True)
+    topsrc = "[0:v]"
     fc = (f"{topsrc}setpts=PTS/{sp},tpad=stop_mode=clone:stop_duration=4,split=2[t1][t2];"
           f"[t1]scale={W}:{SPLIT_TOP_H}:force_original_aspect_ratio=increase,"
           # o ganho de exposicao vale pro FUNDO tambem: clarear so o card deixava o
@@ -571,7 +624,12 @@ def _pular_preto(src, st, dur_take):
 
 def r_insert(cfg,text,s,e,out,wt=None):
     if cfg.get("split"):
-        return r_split_tela(cfg,text,s,e,out,wt)
+        # o layout marcado pelo ritmo VENCE o `split` do config: e ele que faz a
+        # visita seguinte ao mesmo asset parecer outra coisa (ver _layout no ritmo.py)
+        if cfg.get("_layout") == "cheio":
+            pass                      # cai no caminho de tela cheia logo abaixo
+        else:
+            return r_split_tela(cfg,text,s,e,out,wt)
     d=e-s; src=cfg["file"]; sp=cfg.get("speed",1.0); st=cfg.get("start",0); take=d*sp
     st=_pular_preto(src, float(st), take)   # fade-from-black da fonte nao entra no corte seco
     N=nframes(e-s); ass=caption_ass(text,s,d,wt)   # legenda karaoke embaixo
@@ -982,6 +1040,14 @@ for _seg in _plano:
     _usadas[_bi] = _ini + len(_wa)
     if _seg["tipo"] == "orig" and _b["type"] == "insert":
         _novo["type"] = "orig"          # plano que volta pro rosto no meio do insert
+    if _seg.get("layout"):
+        # ALTERNANCIA DE LAYOUT (26/08/2026). Com o `crop` desligado no split, duas
+        # visitas ao mesmo asset mostravam o quadro IDENTICO e o corte nao registrava
+        # na deteccao de cena: medi 17 cortes no arquivo contra 12 visitas planejadas,
+        # e 75% do anuncio em plano acima de 6s. Trocar o layout entre visitas muda
+        # ~60% dos pixels e registra de verdade, sem precisar de asset novo nem de
+        # zoom (que foi o que o Julio reprovou).
+        _novo["_layout"] = _seg["layout"]
     if _seg.get("crop"):
         _novo["_crop"] = _seg["crop"]   # reenquadramento deste plano
     if _seg.get("base"):
@@ -1017,6 +1083,13 @@ for i,(b,(s,e)) in enumerate(zip(blocks,spans)):
                                             base=b.get("_base",1.0))
     elif b["type"]=="insert":
         _c = find_insert(b["instr"])
+        if b.get("_layout"):
+            # O layout vem do PLANO DE RITMO e mora no bloco; o r_insert recebe o cfg do
+            # INSERT. Sem repassar aqui, a marcacao nunca chegava e as duas fatias
+            # marcadas "cheio" no jh13 renderizaram em split assim mesmo (conferido em
+            # quadro, t=37s e t=84s). Quarto ramo do mesmo erro do dia: emenda que
+            # compila, nao aplica.
+            _c = {**_c, "_layout": b["_layout"]}
         if b.get("_crop"):
             _c = {**_c, "crop": b["_crop"]}   # reenquadramento deste plano (jump cut)
         if b.get("_fonte_off"):

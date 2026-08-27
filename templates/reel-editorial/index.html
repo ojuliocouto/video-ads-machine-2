@@ -296,6 +296,15 @@
          bloco do CTA (~240px) e o logo (~130px), nessa ordem, sem encostar no rosto. */
       /* 570 (era 470): sem a seta como filho direto, a coluna do CTA encolheu 100px.
          Compensar mantem a pill exatamente onde o diretor aprovou (y 1219-1350). */
+      /* SPLIT (26/08/2026): o CTA esta calibrado pro avatar em tela CHEIA. Quando o
+         ultimo bloco e tela dividida, o apresentador vive so em y1150-1920 e os mesmos
+         570px do rodape poem a pilula na TESTA e o logo em cima dos DOIS OLHOS dele
+         (medido pelo diretor de arte no jh13, t=86,5s). Mesma familia de defeito da
+         legenda e do lettering: elemento calibrado pra uma geometria, usado em outra.
+         No split ele desce pra faixa que a legenda da costura ja provou segura. */
+      #cta.cta-split { bottom:150px; }
+      #cta.cta-split .pill { font-size:52px; }
+      #ev-logo.logo-split { bottom:40px; width:400px; }
       #cta { position:absolute; left:0; right:0; bottom:570px; z-index:46;
         display:flex; flex-direction:column; align-items:center; gap:30px; }
       /* scrim: da contraste pro CTA e pro logo sobre a camiseta clara do apresentador
@@ -473,8 +482,14 @@
         var gStart = parseFloat(grp.dataset.gStart);
         var gEnd = parseFloat(grp.dataset.gEnd);
         grp.style.cssText = "opacity:0;visibility:hidden;";
-        tl.set(grp, { visibility: "visible" }, gStart);
-        tl.to(grp, { opacity: 1, duration: 0.12, ease: "power1.out" }, gStart);
+        // ENTRA ANTES DO ANTERIOR SAIR (26/08/2026). O grupo que sai faz opacity:0 em
+        // gEnd-0.1 e o que entra comecava o fade em gStart, com gStart == gEnd do
+        // vizinho: os dois ficavam perto de zero por ~0,06s e a legenda PISCAVA. O
+        // diretor de arte contou 41 micro-apagoes de 2 a 4 quadros somando 5,10s.
+        // Comecar 0,12s antes cobre a saida do anterior e o corte fica limpo.
+        var gIn = Math.max(0, gStart - 0.12);
+        tl.set(grp, { visibility: "visible" }, gIn);
+        tl.to(grp, { opacity: 1, duration: 0.16, ease: "power1.out" }, gIn);
         grp.querySelectorAll(".cw").forEach(function (span) {
           var wStart = parseFloat(span.dataset.wStart);
           gsap.set(span, { opacity: 0, y: 8 });

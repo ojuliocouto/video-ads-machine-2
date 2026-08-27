@@ -251,7 +251,7 @@ def gate_entrada(ad, look):
         # higienizador comeu 4 palavras no jh13 ("uma campanha"->"panha", "algo" apagado)
         # e so apareceu no video pronto, depois do avatar gerado.
         if bruto.exists() and os.environ.get("CHECAR_FALA") != "0":
-            aa = V2L / "auditar_audio.py"
+            aa = CODIGO / "auditar_audio.py"
             if aa.exists():
                 # (migracao 26/08/2026) codigo agora vizinho; import direto resolve
                 try:
@@ -307,7 +307,7 @@ def build(ad, look, fmt="9x16"):
         # terceiro e ultimo lugar onde o prefixo "ad" era fixo (os outros dois eram a
         # pasta de audio e o arquivo do avatar). Ad da leva da Jheni ja vem como "jh13".
         pref_cfg = "" if str(ad).startswith("jh") else "ad"
-        r = subprocess.run([sys.executable, str(V2L / "build_composite.py"),
+        r = subprocess.run([sys.executable, str(CODIGO / "build_composite.py"),
                             f"{pref_cfg}{ad}v2", look, fmt],
                            capture_output=True, text=True)
     saida = (r.stdout or "") + (r.stderr or "")
@@ -331,6 +331,25 @@ def gate(ad, fmt="9x16"):
     # cara. Nenhum gate media isso, entao so o olho humano pegava, e depois de pronto.
     # Agora e medido: rosto por Haar, tinta por alpha do overlay, e reprova antes de
     # entregar. Ver ~/.claude/scripts/gate-colisao-texto.py.
+    # RITMO (26/08/2026): o `medir_ritmo.py` existe, funciona, retorna exit 1 e
+    # REPROVAVA o jh13 entregue (63% do anuncio em plano acima de 6s, teto 40%). E
+    # ninguem o chamava no build: `grep -rn medir_ritmo produzir_ad.py
+    # build_composite.py` nao devolvia nada. O ad saiu carimbado PRONTO no _status.json
+    # com o gate de ritmo reprovando, porque o gate estava desligado da tomada.
+    # Regra da casa: checklist nao bloqueia, GATE bloqueia.
+    if os.environ.get("GATE_RITMO") != "0":
+        _pref = "" if str(ad).startswith("jh") else "ad"
+        _fin = sorted(V1.glob(f"output/{_pref}{ad}v2_*_v2composite_{fmt}.mp4"),
+                      key=lambda q: q.stat().st_mtime)
+        if _fin:
+            _rr = subprocess.run([sys.executable, str(CODIGO / "medir_ritmo.py"),
+                                  str(_fin[-1])], capture_output=True, text=True)
+            print(_rr.stdout, flush=True)
+            if _rr.returncode != 0:
+                ok = False
+                _ls = [l.strip() for l in _rr.stdout.split("\n") if "REPROVA" in l]
+                motivos.append("ritmo: " + "; ".join(_ls[:2])[:180])
+
     gcol = Path.home() / ".claude" / "scripts" / "gate-colisao-texto.py"
     if gcol.exists() and os.environ.get("GATE_COLISAO") != "0":
         pref = "" if str(ad).startswith("jh") else "ad"
@@ -372,7 +391,7 @@ def produzir(ad, look=None, fmt="9x16"):
     # de edicao APROVADO pelo Julio, tudo com evidencia, ANTES de qualquer build.
     # Desligar so com ordem explicita dele: FASE_GATE=0.
     if os.environ.get("FASE_GATE") != "0":
-        fg = subprocess.run([sys.executable, str(V2L / "fase_gate.py"), "check-build", ad],
+        fg = subprocess.run([sys.executable, str(CODIGO / "fase_gate.py"), "check-build", ad],
                             capture_output=True, text=True)
         if fg.returncode != 0:
             motivo = (fg.stdout + fg.stderr).strip()
@@ -398,7 +417,7 @@ def produzir(ad, look=None, fmt="9x16"):
             gravar_status(chave, "SEM FONTE NO DOC", motivo)
             print(f"\n>>> AD{ad} {fmt}: {motivo}", flush=True)
             return False
-        vf = subprocess.run([sys.executable, str(V2L / "verificar_fidelidade.py"), ad],
+        vf = subprocess.run([sys.executable, str(CODIGO / "verificar_fidelidade.py"), ad],
                             capture_output=True, text=True)
         print(vf.stdout, flush=True)
         if vf.returncode != 0:
