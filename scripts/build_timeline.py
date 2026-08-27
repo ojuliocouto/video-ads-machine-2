@@ -189,7 +189,9 @@ def _close_caption_group(bucket: list[dict]) -> dict:
 
 # Quanto um grupo de legenda SEGURA depois da ultima palavra, pra atravessar a pausa
 # da fala. Ver `_segurar_nas_pausas`.
-SEGURAR_MAX = 1.30      # nunca segurar mais que isso
+# 1,30s deixava 11,8% do anuncio sem texto (teto 12%), com dois vaos de 1,41s e
+# 1,56s, este ultimo bem na virada de argumento. 1,60s fecha os dois.
+SEGURAR_MAX = 1.60      # nunca segurar mais que isso
 SEGURAR_FOLGA = 0.06    # respiro antes do proximo grupo entrar
 
 

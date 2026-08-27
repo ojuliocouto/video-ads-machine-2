@@ -337,6 +337,31 @@ def main(cfg_path):
         # split ele mora na metade de baixo do quadro, e o lettering centrado pousa
         # exatamente no rosto dele (medido no AD21: "SKILLS DO ZERO" em cima da cara).
         no_split = any(a <= t0 < b for a, b in janelas_split)
+        # NAO ATRAVESSAR TROCA DE LAYOUT (27/08/2026). A posicao do lettering e escolhida
+        # pelo layout do INICIO dele, e ele continua na tela por 2s: se o quadro vira
+        # split no meio, a posicao calibrada pra tela cheia (tinta y1420-1660) cai no
+        # rosto do painel de baixo, que naquele enquadramento comeca em y1278.
+        # Foi a colisao medida em t=7,5s do jh13, 5,1% da caixa do rosto: o lettering
+        # nasceu em 6,7s sobre avatar cheio e o corte pro split aconteceu embaixo dele.
+        # Nao existe faixa que sirva pros dois layouts (o rosto anda de y577 a y1278 ao
+        # longo do anuncio), entao a saida nao e escolher melhor: e nao atravessar.
+        for _a, _b in janelas_split:
+            _borda = _a if (t0 < _a < t0 + dur_l) else (_b if t0 < _b < t0 + dur_l else None)
+            if _borda is not None:
+                _novo = round(_borda - t0 - 0.08, 2)
+                if _novo >= 1.20:
+                    print(f"   [layout] lettering '{L['key'][:26]}' encurtado de "
+                          f"{dur_l:.2f}s pra {_novo:.2f}s: o quadro troca de layout em "
+                          f"{_borda:.2f}s", flush=True)
+                    dur_l = _novo
+                else:
+                    # curto demais pra caber antes da troca: nasce DEPOIS dela
+                    print(f"   [layout] lettering '{L['key'][:26]}' adiado de {t0:.2f}s "
+                          f"pra {_borda + 0.08:.2f}s: nao cabe antes da troca de layout",
+                          flush=True)
+                    t0 = round(_borda + 0.08, 2)
+                    no_split = any(a <= t0 < b for a, b in janelas_split)
+                break
         # LOGO DA OCC junto do lettering, quando o roteiro pede (bloco marcado com
         # "+ logo da occ"). O diretor de arte reprovou o jh13 porque o bloco 14 pede
         # lettering E logo e a tela nao mostrava nenhum dos dois. O lettering ja e um
@@ -477,11 +502,30 @@ def main(cfg_path):
         # 0,35s). Alargar a janela por igual nos dois lados custa, no pior caso, um
         # grupo pousar na costura um pouco antes/depois do corte visual: cosmetico,
         # nunca colisao.
+        # SO PRA FRENTE (27/08/2026). A folga era simetrica, e o comentario acima
+        # justificava: "no pior caso um grupo pousa na costura um pouco antes ou depois
+        # do corte visual: cosmetico, nunca colisao". Isso valia enquanto a costura
+        # ficava LA EMBAIXO (tinta em y1796-1841), onde ela caia na camiseta em qualquer
+        # layout. Hoje a costura subiu pra y967-1106, que so e seguro DURANTE o split:
+        # num quadro de avatar cheio essa faixa cai no rosto.
+        # Medido no jh13: o split termina em 80,64s e a legenda de 81,0s ainda herdava a
+        # costura pela folga, com 1,6% do rosto coberto (teto 1,5%).
+        # A folga de ENTRADA continua, e ela e a que resolve o problema original: grupo
+        # que comeca um pouco antes da janela abrir, quando a footage ja cortou.
         MARGEM_SPLIT = 0.5
         n = 0
         for g in groups:
-            if any(a - MARGEM_SPLIT <= g["start"] < b + MARGEM_SPLIT
-                  for a, b in janelas_split):
+            # PELO MEIO DO GRUPO, NAO PELO COMECO (27/08/2026, segunda passada). Tirar
+            # a folga de tras nao bastou: o grupo "publicacao e aprender" NASCE dentro
+            # do split (108,40s, janela ate 108,86s) e vive 0,98s depois que ele acaba,
+            # ou seja dois tercos da vida dele sao de avatar cheio, com a costura em
+            # cima do rosto (1,6% de cobertura medida em t=81,0s).
+            # O meio do grupo diz onde ele passa a maior parte do tempo. A minoria fica
+            # na posicao errada por uma fracao de segundo, e nao ha posicao que sirva
+            # pros dois layouts: no split so a costura escapa do rosto, no avatar cheio
+            # e justamente a costura que cai nele.
+            _meio = (g["start"] + g["end"]) / 2
+            if any(a - MARGEM_SPLIT <= _meio < b for a, b in janelas_split):
                 g["costura"] = True
                 g.pop("baixa", None)
                 n += 1

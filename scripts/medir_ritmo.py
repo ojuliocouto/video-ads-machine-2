@@ -68,16 +68,68 @@ def cortes_de(p):
     return [float(m) for m in re.findall(r"pts_time:([0-9.]+)", r.stdout + r.stderr)]
 
 
+def cortes_confirmados(video, plano_json, accel=1.35, limiar=0.62, fps=8, tol=0.45):
+    """Cortes que o plano PEDIU e que a imagem de fato entrega.
+
+    Nasceu de duas medicoes que se contradiziam no mesmo arquivo (27/08/2026):
+
+      `cortes_de` disse 31 cortes, 20,6/min      -> o diretor de arte mostrou na mao que
+                                                    10 deles eram o fundo desfocado de UM
+                                                    insert piscando em 4,4s
+      `cortes_de` disse 15 cortes, 10,0/min      -> depois de congelar o fundo, o mesmo
+                                                    detector parou de ver corte que existe:
+                                                    `orig -> cheio` troca 100% do conteudo
+                                                    e pontuou 0,18 contra limiar 0,30
+
+    As duas falhas tem a MESMA causa: `scene` compara diferenca ABSOLUTA de pixel, entao
+    confunde mudanca de brilho com mudanca de conteudo. Num anuncio escuro de ponta a
+    ponta ele sub-conta; num fundo que pisca ele super-conta. O proprio modulo ja avisava
+    ("CEGO EM MATERIAL ESCURO"), mas o gate chamava esse caminho mesmo assim.
+
+    Aqui a conta cruza as duas fontes que temos e que sao independentes:
+      1. o PLANO diz onde nos mandamos cortar (nao adivinha, nos escrevemos)
+      2. a IMAGEM diz se aquele corte mudou alguma coisa, medida com cada quadro
+         normalizado (media zero, desvio um), o que tira o brilho da conta
+
+    Um corte so conta se as duas concordarem. Isso derruba de uma vez os tres erros:
+    piscada de fundo nao esta no plano; mudanca de pagina dentro de uma gravacao continua
+    nao esta no plano; e punch de avatar esta no plano mas nao muda a imagem.
+
+    Validado contra as referencias do Julio, com a metrica normalizada: ref1 25,5/min,
+    ref2 19,8, ref3 23,6 (todas na faixa 18 a 28 que o ffmpeg tambem dava) e a ref de
+    HOOK do Sobral em 1,4/min, que e o caso que nao pode pontuar alto.
+    """
+    import numpy as np
+    LARG, ALT = 64, 114
+    out = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(video),
+         "-vf", f"fps={fps},scale={LARG}:{ALT},format=gray", "-f", "rawvideo", "-"],
+        capture_output=True).stdout
+    n = len(out) // (LARG * ALT)
+    if n < 2:
+        return []
+    f = np.frombuffer(out[:n * LARG * ALT], dtype=np.uint8).reshape(n, ALT * LARG)
+    f = f.astype(np.float32)
+    f = (f - f.mean(axis=1, keepdims=True)) / (f.std(axis=1, keepdims=True) + 1e-6)
+    d = np.abs(f[1:] - f[:-1]).mean(axis=1)
+    vistos = [(i + 1) / fps for i in np.where(d > limiar)[0]]
+    segs = json.loads(Path(plano_json).read_text()).get("segs", [])
+    pedidos = sorted({round(x["s"] / accel, 2) for x in segs if x["s"] > 0.5})
+    return [t for t in pedidos if any(abs(t - v) <= tol for v in vistos)]
+
+
 def _planos(cortes, dur):
     """Duracao de cada plano, a partir dos instantes de corte."""
     marcos = [0.0] + sorted(cortes) + [dur]
     return [b - a for a, b in zip(marcos, marcos[1:]) if b > a]
 
 
-def medir(p):
+def medir(p, plano=None, accel=1.35):
     p = Path(p)
     dur = _dur(p)
-    cortes = cortes_de(p)
+    # Com o plano em maos, o corte tem que ser PEDIDO e VISTO. Sem plano (referencia de
+    # terceiro, que nao tem plano nosso), so resta a deteccao. Ver cortes_confirmados().
+    cortes = cortes_confirmados(p, plano, accel) if plano else cortes_de(p)
     planos = _planos(cortes, dur)
     lentos = [x for x in planos if x > PLANO_LONGO_S]
     return {
@@ -218,7 +270,12 @@ def main():
     if args[0] == "--prancha":
         todos = [medir_prancha(a) for a in args[1:]]
     else:
-        todos = [medir(a) for a in args]
+        _plano = _accel = None
+        if "--ritmo-json" in args:
+            i = args.index("--ritmo-json"); _plano = args[i + 1]; del args[i:i + 2]
+        if "--accel" in args:
+            i = args.index("--accel"); _accel = float(args[i + 1]); del args[i:i + 2]
+        todos = [medir(a, _plano, _accel or 1.35) for a in args]
     # NAO usar all(...) com gerador: ele faz short-circuit e para de imprimir no
     # primeiro que reprova, escondendo os demais. Medir varios e mostrar um so e pior
     # que nao medir, porque parece cobertura.

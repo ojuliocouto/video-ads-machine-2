@@ -108,9 +108,19 @@
         box-shadow:0 6px 24px rgba(0,0,0,.45); }
       .chip .dot { display:inline-block; width:12px; height:12px; border-radius:50%;
         background:#7bdc72; margin-right:12px; }
+      /* DESCEU E ENCOLHEU (27/08/2026, auditoria do diretor de arte).
+         Eram 560px do rodape, ou seja tinta terminando em y1360, dentro do rosto: em
+         t=72,96s o bloco "TOCA EM / SAIBA MAIS" ocupava y1082-1491 com o labio
+         inferior em y1011, e em t=41,48s o "SEM PAGAR HOSPEDAGEM" cobria 9,76% da
+         caixa do rosto. O conserto de hoje mexeu SO no ramo do split (.lett-split) e
+         deixou este parado: emenda por busca de texto acerta um ramo, pela enesima vez.
+         A faixa livre neste look, em tela cheia, vai do fim da barba (y1420 medido) ao
+         teto da UI do Reels (y1690): 270px. 260px do rodape poe a tinta em y1420-1660.
+         E o padding lateral sobe de 90 pra 140: a tinta chegava em x987 (hook em x1020)
+         e a coluna de curtir/comentar do Reels comeca em x940. */
       .lett { position:absolute; inset:0; z-index:34; pointer-events:none;
         display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
-        gap:6px; padding:0 90px 560px;
+        gap:6px; padding:0 140px 260px;
         background:radial-gradient(78% 30% at 50% 70%, rgba(0,0,0,.90) 0%, rgba(0,0,0,.62) 46%, transparent 78%); }
       /* TELA DIVIDIDA: o insert ocupa y0-980 e o Thales y980-1920. O lettering padrao
          (560px do rodape, ou seja ~y1360) cai bem na altura do rosto dele. Aqui ele desce
@@ -129,7 +139,7 @@
          Agora usa a MESMA faixa que a legenda da costura ja provou segura (glifos em
          y1792-1853): 40px do rodape com fonte menor, o unico jeito de caber sob o
          queixo sem entrar na UI do Reels. */
-      .lett.lett-split { padding:0 90px 790px;
+      .lett.lett-split { padding:0 140px 790px;
         /* O SCRIM ACOMPANHA O TEXTO (27/08/2026). Subi o lettering pra cima da
            costura e deixei o degrade em 92% da altura: virou uma mancha preta
            solta no rodape, longe do texto que ela deveria apoiar. Medido no MOV
@@ -144,13 +154,13 @@
       /* SAIU DA UI (27/08/2026): 190px punha a tinta terminando em y1730, ou seja
          DENTRO da faixa que o Reels cobre com botao e descricao. 250px com a fonte da
          costura (58px) fecha em y1670, sob o queixo e acima do rodape do app. */
-      .lett.lett-baixo { padding:0 90px 250px;
+      .lett.lett-baixo { padding:0 140px 250px;
         background:radial-gradient(86% 22% at 50% 83%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
       .lett.lett-baixo .key { font-size:58px; line-height:1.10; }
       /* PILHA: lista que acumula. Sans em vez do serif italico porque isto e uma LISTA
          de itens, nao uma afirmacao unica, e alinhada a esquerda porque item de lista
          centralizado nao le como lista. Faixa entre o queixo e a legenda. */
-      .lett.lett-pilha { padding:0 90px 470px; align-items:flex-start;
+      .lett.lett-pilha { padding:0 140px 470px; align-items:flex-start;
         background:radial-gradient(84% 26% at 50% 76%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
       .lett.lett-pilha .key { font-family:"Inter"; font-style:normal; font-weight:600;
         font-size:54px; line-height:1.30; text-align:left; letter-spacing:-.2px;
@@ -281,7 +291,14 @@
          nunca mais perto. */
       #caps .cw { font-family:"Inter"; font-weight:800; font-size:80px;
         color:#F5EFE6; letter-spacing:-0.02em; line-height:1.14;
-        paint-order:stroke fill; -webkit-text-stroke:0.065em rgba(6,7,12,.92);
+        paint-order:stroke fill; -webkit-text-stroke:0.078em rgba(6,7,12,.92);
+        /* HALO POR GLIFO, NAO TARJA (27/08/2026). O diretor mediu contraste de 1,32:1
+           em t=19,5s e 1,46:1 em t=50,5s, contra o minimo de 3:1 pra texto grande: em
+           asset claro o contorno segura a FORMA da letra mas o miolo funde com o fundo
+           e a palavra le como contorno oco. O scrim saiu em 19/08 por ordem da Jheni
+           ("me da panico, deixa esteticamente pobre") e nao volta: `drop-shadow` segue
+           o contorno do glifo, entao escurece so o que encosta na letra, sem retangulo. */
+        filter:drop-shadow(0 0 10px rgba(6,7,12,.95)) drop-shadow(0 0 3px rgba(6,7,12,.9));
         text-shadow:0 2px 5px rgba(0,0,0,.55), 0 8px 26px rgba(0,0,0,.42); }
       /* Enfase por COR, uma propriedade so: terracota da marca, o mesmo tom do
          sunburst do wordmark. Herda familia, peso, corpo, tracking e contorno.
@@ -295,13 +312,26 @@
          pos-layout, entao a linha nao treme e as palavras vizinhas nao se mexem.
          O piso de 0.82 nao pode baixar: o gate-ad.py conta texto na tela por alpha>190,
          e abaixo de 0.80 ele para de enxergar a legenda e acusa buraco que nao existe. */
-      #caps .cw { opacity:.82; transform-origin:50% 82%; will-change:opacity, transform; }
+      /* RESERVA PRA PALAVRA CRESCER (27/08/2026). O `scale` do realce cresce o glifo
+         2,5% (5% na palavra-chave) pra CADA lado alem da caixa de layout, e come o
+         `gap:6px 14px`. Medido no MOV de overlay: "briefing|para" e "uma|entrega" com
+         vao de 2px, "tipo|de" com 5px, contra os 14px declarados. Na tela vira uma
+         palavra so, e os dois auditores contaram 11 e 14 grupos colados
+         ("apublicacao", "manual deinstrucoes", "briefingpara o").
+         O padding da a reserva e o margin negativo devolve o espaco pro layout: o gap
+         continua 14px e nada se move. 10px = 2,5% da palavra mais larga medida
+         ("briefing", 320px de tinta a 80px, 8px por lado, com folga). */
+      #caps .cw { opacity:.82; transform-origin:50% 82%; will-change:opacity, transform;
+        padding-inline:10px; margin-inline:-10px; }
       #caps .cw.on  { opacity:1; }
       #caps .cw.off { opacity:.90; }
       /* logo da OCC DENTRO do lettering (roteiro: "lettering + logo da occ").
          Largura menor que a do #ev-logo do fim (500px) pra ler como assinatura do
          lettering, nao como fechamento do anuncio. */
-      .lett .lett-logo { display:block; width:360px; margin:34px auto 0;
+      /* 360px de largura dava 96px de altura e o bloco fechava em 409px, contra os
+         270px de faixa livre. A logo do meio e assinatura, nao e o CTA final (esse
+         tem o #ev-logo de 500px): 240px dao 64px e o bloco cabe. */
+      .lett .lett-logo { display:block; width:240px; margin:18px auto 0;
         filter:drop-shadow(0 4px 10px rgba(0,0,0,.95)) drop-shadow(0 8px 30px rgba(0,0,0,.7)); }
       /* ---------- LOGO DO EVENTO ---------- */
       /* logo ABAIXO do bloco de CTA (ver comentario do #cta): antes os dois dividiam
@@ -514,6 +544,7 @@
       // ===== CAPTIONS (data-driven): le o #caps injetado pelo build_timeline =====
       // Cada .cgrp tem data-g-start/data-g-end; cada .cw tem data-w-start/data-w-end.
       // O #caps e as legendas sao HTML estatico injetado no marcador de captions do body.
+      var _fimAnterior = null;
       document.querySelectorAll("#caps .cgrp").forEach(function (grp) {
         var gStart = parseFloat(grp.dataset.gStart);
         var gEnd = parseFloat(grp.dataset.gEnd);
@@ -523,7 +554,16 @@
         // vizinho: os dois ficavam perto de zero por ~0,06s e a legenda PISCAVA. O
         // diretor de arte contou 41 micro-apagoes de 2 a 4 quadros somando 5,10s.
         // Comecar 0,12s antes cobre a saida do anterior e o corte fica limpo.
-        var gIn = Math.max(0, gStart - 0.12);
+        // ANTECIPACAO CONDICIONAL (27/08/2026). Comecar 0,12s antes existe pra cobrir a
+        // saida do grupo anterior e matar a piscada (41 micro-apagoes medidos em 26/08).
+        // Mas quando o grupo anterior termina EXATAMENTE aqui, a antecipacao poe os dois
+        // na tela ao mesmo tempo: 0,10s por transicao, 5,9s no anuncio, e o diretor
+        // capturou "mas nao sabe" por cima de "que como o" em t=31,3s. Grupo colado no
+        // anterior entra na hora; grupo depois de pausa antecipa, que e onde a piscada
+        // podia acontecer e onde nao ha ninguem pra empilhar.
+        var _colado = (_fimAnterior !== null && gStart - _fimAnterior < 0.05);
+        var gIn = _colado ? gStart : Math.max(0, gStart - 0.12);
+        _fimAnterior = gEnd;
         tl.set(grp, { visibility: "visible" }, gIn);
         tl.to(grp, { opacity: 1, duration: 0.16, ease: "power1.out" }, gIn);
         grp.querySelectorAll(".cw").forEach(function (span) {
@@ -532,7 +572,7 @@
           // DWELL MINIMO: palavra funcional ("de", "que", "um") dura 0,12s a 0,18s na
           // fala. Abaixo de 0,34s o realce vira estrobo, entao segura o pico.
           if (!(wEnd > wStart + 0.34)) { wEnd = wStart + 0.34; }
-          var pico = span.classList.contains("kw") ? 1.10 : 1.05;
+          var pico = span.classList.contains("kw") ? 1.06 : 1.04;
           gsap.set(span, { opacity: 0.82, scale: 1, y: 8 });
           tl.to(span, { opacity: 1, y: 0, scale: pico, duration: 0.14,
                         ease: "power2.out", overwrite: "auto" }, wStart);
@@ -541,6 +581,11 @@
         });
         // fade-out termina EXATAMENTE em gEnd (antes era gEnd-0.06 + 0.16s = gEnd+0.10,
         // vazava por cima do fade-in do proximo grupo e empilhava duas legendas)
+        // Antecipar a SAIDA junto com a entrada foi a primeira tentativa e saiu pior:
+        // o tempo sem texto na tela subiu de 7% pra 12% (o teto do gate e 12%), porque
+        // entre grupos NAO contiguos os 0,12s viravam tela vazia. A janela de legenda
+        // dupla se fecha do outro lado, no `gIn` acima: quem entra colado no anterior
+        // nao antecipa. Medido nos dois builds, nao deduzido.
         tl.to(grp, { opacity: 0, duration: 0.1, ease: "power1.in" }, gEnd - 0.1);
         tl.set(grp, { opacity: 0, visibility: "hidden" }, gEnd);
       });

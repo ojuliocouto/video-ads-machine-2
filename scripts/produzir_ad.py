@@ -342,8 +342,19 @@ def gate(ad, fmt="9x16"):
         _fin = sorted(V1.glob(f"output/{_pref}{ad}v2_*_v2composite_{fmt}.mp4"),
                       key=lambda q: q.stat().st_mtime)
         if _fin:
-            _rr = subprocess.run([sys.executable, str(CODIGO / "medir_ritmo.py"),
-                                  str(_fin[-1])], capture_output=True, text=True)
+            # O PLANO VAI JUNTO (27/08/2026). Sem ele o medidor cai na deteccao de
+            # cena, que compara diferenca ABSOLUTA de pixel e erra dos dois lados no
+            # mesmo arquivo: contou 10 "cortes" num fundo desfocado piscando e depois
+            # deixou de ver `orig -> cheio`, que troca 100% do conteudo, porque o
+            # anuncio e escuro de ponta a ponta. Com o plano, o corte precisa ser PEDIDO
+            # por nos E VISTO na imagem. Ver cortes_confirmados() no medir_ritmo.
+            _cmd = [sys.executable, str(CODIGO / "medir_ritmo.py"), str(_fin[-1])]
+            _rj = sorted(V1.glob(f"output/{_pref}{ad}v2_*_footage_1x_ritmo.json"),
+                         key=lambda q: q.stat().st_mtime)
+            if _rj:
+                from build_composite import ACCEL as _acc2
+                _cmd += ["--ritmo-json", str(_rj[-1]), "--accel", str(_acc2)]
+            _rr = subprocess.run(_cmd, capture_output=True, text=True)
             print(_rr.stdout, flush=True)
             if _rr.returncode != 0:
                 ok = False

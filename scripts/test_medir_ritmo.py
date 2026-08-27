@@ -80,6 +80,35 @@ class TesteMedidor(unittest.TestCase):
                                  f"{p.name} passou com {m['cortes_min']:.1f}/min e plano "
                                  f"medio {m['plano_medio']:.2f}s: alvo frouxo demais")
 
+    def test_criterio_do_gate_tambem_reprova_ad_lento(self):
+        """O teste acima mede pelo caminho CEGO, que o gate nao usa mais.
+
+        Desde 27/08/2026 o gate cruza plano e imagem (`cortes_confirmados`), porque a
+        deteccao pura errava nos dois sentidos: contou fundo desfocado piscando como 10
+        cortes e depois deixou de ver `orig -> cheio` num anuncio escuro. Trocar o
+        criterio do gate sem trocar o do teste deixaria a calibragem cobrindo um caminho
+        morto: o teste passaria verde enquanto o gate real virava carimbo.
+
+        jh14 e jh15 sao os ads que o Julio e a Jheni acharam lentos. Eles tem que
+        reprovar pelo criterio NOVO tambem, senao o afrouxamento passou.
+        """
+        lentos = [("jh14v2_oficial_13", 16.0), ("jh15v2_neon_creme", 16.0)]
+        checados = 0
+        for nome, piso in lentos:
+            v = OUT / f"{nome}_v2composite_9x16.mp4"
+            j = OUT / f"{nome}_footage_1x_ritmo.json"
+            if not (v.exists() and j.exists()):
+                continue
+            with self.subTest(ad=nome):
+                m = MR.medir(v, str(j), 1.35)
+                self.assertFalse(
+                    MR.aprova(m)[0],
+                    f"{nome} passou pelo criterio do gate com {m['cortes_min']:.1f}/min: "
+                    f"o cruzamento plano x imagem afrouxou a calibragem")
+                checados += 1
+        if not checados:
+            self.skipTest("nenhum ad lento com plano disponivel pra calibrar")
+
     def test_veredito_traz_o_motivo(self):
         m = {"cortes_min": 5.0, "plano_medio": 12.0, "maior_plano": 15.0, "cortes": 7,
              "dur": 90.0, "planos": [15.0]}

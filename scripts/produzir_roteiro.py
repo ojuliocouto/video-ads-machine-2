@@ -295,7 +295,15 @@ def _split_avatar(s, d):
 _CACHE_CONTEUDO = {}
 
 
-ALVO_LUM = 105.0     # luminancia media alvo do painel; os inserts bons caem entre 83 e 100
+ALVO_LUM = 105.0
+# TETO (27/08/2026). O piso acima so LEVANTA, e essa foi a metade que faltou: os assets
+# do jh13 se dividem em dois grupos, cinco entre 33 e 64 de luminancia e cinco entre 193
+# e 244 (paginas brancas). O anuncio alterna entre eles, entao o corte dava soco de
+# +140 a +151 niveis em 0,2s, com o estado branco segurando 3,0s e 4,6s. Nao e corte
+# pelo preto, mas e a mesma classe de defeito, e no celular a noite doi mais.
+# 185 nao lava a pagina branca (ela continua branca), so tira o estouro.
+TETO_LUM = 185.0
+EXPO_MIN = -0.22     # luminancia media alvo do painel; os inserts bons caem entre 83 e 100
 EXPO_MAX = 0.45     # teto: acima disso a fonte escura vira cinza lavado
 _CACHE_LUM = {}
 
@@ -349,6 +357,14 @@ def _eq_exposicao(cfg):
                 print(f"  [exposicao] {os.path.basename(src)}: fonte em {lum:.0f}/255, "
                       f"subindo de {ex:.2f} para {piso:.2f} (alvo {ALVO_LUM})", flush=True)
                 ex = piso
+        elif lum is not None and lum > TETO_LUM:
+            # O valor declarado no JSON vale como MINIMO so quando o asset e escuro.
+            # Numa fonte de 193/255 o `exposicao: 0.18` declarado a mao empurrava a
+            # pagina branca pra ainda mais branca: aqui o teto vence o declarado.
+            teto = max((TETO_LUM - lum) / 255.0, EXPO_MIN)
+            print(f"  [exposicao] {os.path.basename(src)}: fonte em {lum:.0f}/255, "
+                  f"baixando de {ex:.2f} para {teto:.2f} (teto {TETO_LUM})", flush=True)
+            ex = teto
     if abs(ex) < 0.005:
         return ""
     return f"eq=brightness={ex:.3f}:contrast={1 + ex * 0.6:.3f},"
@@ -571,7 +587,13 @@ def r_split_tela(cfg, text, s, e, out, wt=None):
           # e escura na borda, por cima do fim do painel de tela. Substitui a linha dura
           # de 3px; as duas referencias com split usam degrade, nunca linha.
           f"color=black:s={W}x{SPLIT_GRAD}:r={FPS},format=rgba,"
-          f"geq=r=0:g=0:b=0:a='255*0.85*pow(Y/{SPLIT_GRAD-1},1.6)'[grad];"
+          # PISO DO DEGRADE (27/08/2026). Com 0.85 a ultima parada chegava em preto quase
+          # puro; quando o pe do insert JA e escuro, degrade e asset somam e a emenda
+          # vira regua preta. Medido pelo diretor: faixa de 25px com luminancia 0,3 em
+          # t=61,5s, contra 39 no painel do avatar logo abaixo. Em painel claro nao
+          # acontecia, entao o defeito so aparecia em metade dos splits.
+          # 0.62 deixa a linha mais escura em ~14, que e o proprio preto do avatar.
+          f"geq=r=0:g=0:b=0:a='255*0.62*pow(Y/{SPLIT_GRAD-1},1.6)'[grad];"
           f"[c2][grad]overlay=0:{SPLIT_TOP_H-SPLIT_GRAD}:shortest=1,"
           f"fps={FPS},{cap(N)}{_sub(ass)}[v]")
     run(["ffmpeg", "-y", "-ss", str(st), "-t", str(take + 0.4), "-i", src,
@@ -651,7 +673,11 @@ def r_insert_moldura(cfg, text, s, e, out, wt=None):
     nome = f"moldura_cheio_{asp:.4f}.png".replace(".", "_", 1)
     destino = os.path.join(V2L_MOLDURAS, nome)
     # no quadro cheio o card pode ser mais largo: 92% de 1080
-    larg = int(W * 0.92) // 2 * 2
+    # 92% da largura dava card de 27,7% do quadro, MENOS que os 37,5% que o proprio
+    # split entrega (medido pelo diretor de arte nas tres fatias `cheio`). A fatia que
+    # existe pra dar a tela ao insert estava dando menos tela que a que divide o quadro
+    # com o apresentador. 96% e a mesma margem do painel encaixado do split.
+    larg = int(W * 0.96) // 2 * 2
     _antes = moldura.LARGURA_JANELA
     moldura.LARGURA_JANELA = larg
     try:
@@ -665,15 +691,32 @@ def r_insert_moldura(cfg, text, s, e, out, wt=None):
     print(f"  [mockup cheio] {os.path.basename(src)}: janela {jw}x{jh} no quadro inteiro",
           flush=True)
     png = destino.replace("\\", "/").replace(":", "\\:")
-    fc = (f"[0:v]setpts=PTS/{sp},tpad=stop_mode=clone:stop_duration=4,split=2[t1][t2];"
-          f"[t1]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-          f"{_eq_exposicao(cfg)}boxblur=26:1,eq=brightness=-0.14,setsar=1[bg];"
+    # FUNDO CONGELADO (27/08/2026). O fundo desfocado rodava AO VIVO junto com o card,
+    # entao a gravacao de tela por baixo piscava: medido nas laterais do quadro, 35,2 de
+    # luminancia em t=82,8s, 149,7 em t=83,0s e 48,3 em t=84,3s. O medidor de ritmo
+    # contou isso como 10 cortes em 4,4s e o numero de 20,6 cortes/min veio dai; o olho
+    # via estroboscopia, nao corte. E o mesmo fundo duplicava a manchete do asset,
+    # gigante e fora de foco, atras da copia nitida dentro do card.
+    # Um quadro so, esticado pela duracao: fica textura, nao segundo video.
+    # FUNDO CHAPADO, NAO O ASSET DESFOCADO (27/08/2026, segunda passada). Congelar o
+    # quadro matou o estrobo, mas o diretor de arte apontou o defeito que restava: em
+    # t=5,0s a manchete do asset aparecia GIGANTE e fora de foco no topo, com a copia
+    # nitida dela pequena dentro do card. A mesma manchete duas vezes, uma borrada.
+    # E media 0,18 de mudanca de pixel contra o plano vizinho (limiar 0,30), porque
+    # fundo desfocado do asset escuro contra sala escura da quase nada: a troca de
+    # layout nao registrava como corte nem pro medidor nem pro olho.
+    # Chapado resolve os dois: nao repete conteudo e muda o quadro inteiro.
+    fc = (f"[0:v]setpts=PTS/{sp},tpad=stop_mode=clone:stop_duration=4[t2];"
+          f"color={DARK}:s={W}x{H}:r={FPS},setsar=1[bg];"
           f"[t2]{_eq_exposicao(cfg)}scale={jw}:{jh},setsar=1[vid];"
           f"color=black@0:s={cw}x{ch}:r={FPS},format=rgba,setsar=1[cv];"
           f"[cv][vid]overlay={vx}:{vy}:shortest=1[card];"
           f"movie={png},format=rgba,setsar=1[mold];"
           f"[card][mold]overlay=0:0[fg];"
-          f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,fps={FPS},{cap(N)}{_sub(ass)}[v]")
+          # shortest=1 e OBRIGATORIO aqui: o [bg] congelado e um `loop` infinito, e sem
+          # isso quem termina o fluxo e so o trim la na frente, com o ffmpeg moendo
+          # quadro a toa ate la (travou no teste antes de eu por).
+          f"[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1,setsar=1,fps={FPS},{cap(N)}{_sub(ass)}[v]")
     run(["ffmpeg", "-y", "-ss", str(st), "-t", str(d * sp + 0.4), "-i", src,
          "-filter_complex", fc, "-r", str(FPS), "-map", "[v]", "-an",
          "-c:v", "libx264", "-pix_fmt", "yuv420p", out])
@@ -698,6 +741,19 @@ def r_insert(cfg,text,s,e,out,wt=None):
                 return r_insert_moldura(cfg, text, s, e, out, wt)
         else:
             return r_split_tela(cfg,text,s,e,out,wt)
+    # INSERT HORIZONTAL EM TELA CHEIA TAMBEM ENTRA INTEIRO (27/08/2026).
+    # O veto ao `crop` de 26/08 pegou so as entradas com `split: true`. As que nao tem a
+    # flag continuaram pelo caminho antigo, e o diretor de arte achou tres delas ainda
+    # recortando: `gal_8f78677c` guarda 775x1080 de uma fonte 1916x1080, ou seja joga
+    # fora 59,5% da area, e o quadro entregue em t=69,5s mostra so a coluna do preview,
+    # sem a sidebar nem o chat que a fala esta descrevendo.
+    # A ordem do Julio nao tinha ressalva de layout: "o video todo que aparece no video
+    # e o que precisa". Entao vale aqui igual: asset deitado entra na moldura, inteiro.
+    # Imagem estatica e asset em pe seguem pelo caminho de sempre.
+    if (not cfg.get("split")
+            and os.path.splitext(cfg["file"])[1].lower() not in (".jpg",".jpeg",".png",".webp")
+            and _aspecto(cfg["file"]) >= 1.05):
+        return r_insert_moldura(cfg, text, s, e, out, wt)
     d=e-s; src=cfg["file"]; sp=cfg.get("speed",1.0); st=cfg.get("start",0); take=d*sp
     st=_pular_preto(src, float(st), take)   # fade-from-black da fonte nao entra no corte seco
     N=nframes(e-s); ass=caption_ass(text,s,d,wt)   # legenda karaoke embaixo
