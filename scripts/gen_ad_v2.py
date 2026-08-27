@@ -236,11 +236,24 @@ def main(cfg_path):
         # daquele trecho desce pro peito achando que tem insert em cima dele.
         _meus = [(x["s"], x["e"]) for x in _plano_ritmo
                  if x["bloco"] == i and x["tipo"] == "insert"]
+        # LAYOUT POR FATIA, NAO POR BLOCO (27/08/2026, regra dos dois motores).
+        # O ritmo alterna as visitas do mesmo asset entre `split` (com o Thales embaixo)
+        # e `cheio` (card grande, sem Thales). A footage ja obedecia isso; aqui a legenda
+        # ainda decidia pelo `split` do CONFIG, que vale pro bloco inteiro. Resultado: a
+        # fatia `cheio` recebia a classe da COSTURA, calibrada pra emenda entre paineis
+        # que naquela fatia nao existe. E o mesmo desencontro do `dur_max` de 18/08 (CTA
+        # em cima da boca): regra de tempo/posicao nova tem que entrar nos DOIS motores.
+        _cheias = {(round(x["s"], 2), round(x["e"], 2)) for x in _plano_ritmo
+                   if x["bloco"] == i and x["tipo"] == "insert"
+                   and x.get("layout") == "cheio"}
         if not _meus:
             _meus = [(s2, s2 + dur)]
         if icfg.get("split"):
             for _a, _b2 in _meus:
-                janelas_split.append((round(_a, 2), round(min(_b2, e), 2)))
+                _par = (round(_a, 2), round(min(_b2, e), 2))
+                # fatia sem o apresentador embaixo se comporta como insert de tela cheia
+                (janelas_texto if (round(_a, 2), round(_b2, 2)) in _cheias
+                 else janelas_split).append(_par)
         else:
             # INSERT EM TELA CHEIA: a posicao padrao da legenda (y~1375) e calibrada pro
             # AVATAR, onde cai no peito. Sobre um insert ela cai no MEIO do conteudo: o

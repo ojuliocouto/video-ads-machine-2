@@ -129,15 +129,24 @@
          Agora usa a MESMA faixa que a legenda da costura ja provou segura (glifos em
          y1792-1853): 40px do rodape com fonte menor, o unico jeito de caber sob o
          queixo sem entrar na UI do Reels. */
-      .lett.lett-split { padding:0 90px 40px;
-        background:radial-gradient(86% 22% at 50% 92%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
+      .lett.lett-split { padding:0 90px 790px;
+        /* O SCRIM ACOMPANHA O TEXTO (27/08/2026). Subi o lettering pra cima da
+           costura e deixei o degrade em 92% da altura: virou uma mancha preta
+           solta no rodape, longe do texto que ela deveria apoiar. Medido no MOV
+           de overlay: tinta em y937-1120, mancha em y1450-1903. E a mesma sombra
+           que a Jheni ja reprovou ("me da panico, deixa esteticamente pobre"),
+           agora sem nem servir pra nada. 54% e o centro da faixa nova. */
+        background:radial-gradient(86% 22% at 50% 54%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
       .lett.lett-split .key { font-size:58px; line-height:1.10; }
       .lett.lett-split .lead { font-size:24px; letter-spacing:5px; margin-bottom:10px; }
       /* mesma faixa do split, mas pra bloco de avatar em CLOSE, onde o queixo desce e o
          lettering padrao pousa na boca (medido no jh13 aos 27,0s). */
-      .lett.lett-baixo { padding:0 90px 190px;
-        background:radial-gradient(86% 22% at 50% 88%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
-      .lett.lett-baixo .key { font-size:76px; }
+      /* SAIU DA UI (27/08/2026): 190px punha a tinta terminando em y1730, ou seja
+         DENTRO da faixa que o Reels cobre com botao e descricao. 250px com a fonte da
+         costura (58px) fecha em y1670, sob o queixo e acima do rodape do app. */
+      .lett.lett-baixo { padding:0 90px 250px;
+        background:radial-gradient(86% 22% at 50% 83%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
+      .lett.lett-baixo .key { font-size:58px; line-height:1.10; }
       /* PILHA: lista que acumula. Sans em vez do serif italico porque isto e uma LISTA
          de itens, nao uma afirmacao unica, e alinhada a esquerda porque item de lista
          centralizado nao le como lista. Faixa entre o queixo e a legenda. */
@@ -195,8 +204,24 @@
          colisao na boca em t=63s). Fonte menor especifica da costura (58px em vez de
          76) encolhe a caixa de 2 linhas pra ~199px, com folga real sob o queixo
          (medido em y~1610 pro look neon_creme; caixa fica entre y~1681 e y~1880). */
-      #caps .cgrp.cgrp-costura { bottom:40px; padding-top:24px; padding-bottom:24px; }
-      #caps .cgrp.cgrp-costura .cw { font-size:61px; line-height:1.14; }
+      /* SUBIU PRA CIMA DA COSTURA (27/08/2026). Estava em bottom:40px, tinta em
+         y1796-1841, a 66px do fim do quadro. O Julio: "a legenda ta muito na parte de
+         baixo, no anuncio vai ficar atras do botao e da descricao, nem vai dar pra ler".
+
+         A primeira tentativa foi bottom:230px, e ela estava ERRADA: eu tinha medido o
+         queixo em y~1610 no look neon_creme e apliquei o numero no espuma_roxa sem
+         remedir. Medindo as 11 fatias de split do arquivo ENTREGUE (nao da footage 1x,
+         que roda em outro tempo), o rosto desce ate y=1832 e o enquadramento do painel
+         de baixo e um close: NAO EXISTE faixa livre entre o queixo e o teto da UI da
+         plataforma (y=1690). Qualquer tinta entre y1200 e y1900 cai na cara dele.
+
+         A unica faixa limpa do split e ACIMA DA COSTURA: abaixo do card do mockup
+         (base medida em y=889 a 921 nos assets do jh13) e acima da emenda em y=1150.
+         E, por acaso, o que o nome da classe sempre disse. 790px poe a tinta entre
+         y~967 e y~1106: fora do rosto, fora da UI, e por cima do degrade da emenda,
+         que ainda ajuda o contraste. */
+      #caps .cgrp.cgrp-costura { bottom:790px; padding-top:24px; padding-bottom:24px; }
+      #caps .cgrp.cgrp-costura .cw { font-size:64px; line-height:1.14; }
       /* padding vertical maior: o degrade precisa de espaco DENTRO da caixa pra chegar
          em transparente. Com 26px a elipse era cortada e virava retangulo (medido pelo
          diretor de arte no jh16: degrau de -47 em y=1224 e +99 em y=1375). */
@@ -263,6 +288,16 @@
          Nao muda de tamanho de proposito: a caixa e ancorada por `bottom`, entao
          crescer a largura empurraria pra duas linhas e o TOPO subiria pro queixo. */
       #caps .cw.kw { color:#E87D4E; }
+      /* DESTAQUE DA PALAVRA FALADA (27/08/2026, pedido do Julio: "um estilo de legenda
+         mais legal, capcutizavel"). Tres estados, que e o que separa karaoke de
+         pisca-pisca: por dizer (0.82), dizendo (1.0 + escala), ja dito (0.90).
+         So `opacity` e `transform` sao animados, nunca a letra em si: transform e
+         pos-layout, entao a linha nao treme e as palavras vizinhas nao se mexem.
+         O piso de 0.82 nao pode baixar: o gate-ad.py conta texto na tela por alpha>190,
+         e abaixo de 0.80 ele para de enxergar a legenda e acusa buraco que nao existe. */
+      #caps .cw { opacity:.82; transform-origin:50% 82%; will-change:opacity, transform; }
+      #caps .cw.on  { opacity:1; }
+      #caps .cw.off { opacity:.90; }
       /* logo da OCC DENTRO do lettering (roteiro: "lettering + logo da occ").
          Largura menor que a do #ev-logo do fim (500px) pra ler como assinatura do
          lettering, nao como fechamento do anuncio. */
@@ -302,9 +337,10 @@
          (medido pelo diretor de arte no jh13, t=86,5s). Mesma familia de defeito da
          legenda e do lettering: elemento calibrado pra uma geometria, usado em outra.
          No split ele desce pra faixa que a legenda da costura ja provou segura. */
-      #cta.cta-split { bottom:150px; }
+      /* mesma faixa livre da legenda: em split, abaixo da costura e tudo rosto. */
+      #cta.cta-split { bottom:965px; }
       #cta.cta-split .pill { font-size:52px; }
-      #ev-logo.logo-split { bottom:40px; width:400px; }
+      #ev-logo.logo-split { bottom:800px; width:330px; }
       #cta { position:absolute; left:0; right:0; bottom:570px; z-index:46;
         display:flex; flex-direction:column; align-items:center; gap:30px; }
       /* scrim: da contraste pro CTA e pro logo sobre a camiseta clara do apresentador
@@ -492,8 +528,16 @@
         tl.to(grp, { opacity: 1, duration: 0.16, ease: "power1.out" }, gIn);
         grp.querySelectorAll(".cw").forEach(function (span) {
           var wStart = parseFloat(span.dataset.wStart);
-          gsap.set(span, { opacity: 0, y: 8 });
-          tl.to(span, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out", overwrite: "auto" }, wStart);
+          var wEnd = parseFloat(span.dataset.wEnd);
+          // DWELL MINIMO: palavra funcional ("de", "que", "um") dura 0,12s a 0,18s na
+          // fala. Abaixo de 0,34s o realce vira estrobo, entao segura o pico.
+          if (!(wEnd > wStart + 0.34)) { wEnd = wStart + 0.34; }
+          var pico = span.classList.contains("kw") ? 1.10 : 1.05;
+          gsap.set(span, { opacity: 0.82, scale: 1, y: 8 });
+          tl.to(span, { opacity: 1, y: 0, scale: pico, duration: 0.14,
+                        ease: "power2.out", overwrite: "auto" }, wStart);
+          tl.to(span, { opacity: 0.90, scale: 1, duration: 0.22,
+                        ease: "power1.inOut", overwrite: "auto" }, wEnd);
         });
         // fade-out termina EXATAMENTE em gEnd (antes era gEnd-0.06 + 0.16s = gEnd+0.10,
         // vazava por cima do fade-in do proximo grupo e empilhava duas legendas)

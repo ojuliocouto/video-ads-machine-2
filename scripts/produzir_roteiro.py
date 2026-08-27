@@ -447,6 +447,17 @@ def _fg_painel_mockup(src, expo=""):
     """
     import moldura
     asp = _aspecto(src)
+    # MOCKUP SO EM ASSET HORIZONTAL (27/08/2026). A moldura existe pra dar forma a um
+    # quadro DEITADO dentro de um painel quase quadrado. Num asset em pe ela faz o
+    # oposto: com LARGURA_JANELA fixa em 1008, um 9:16 gera card de 1854px de altura
+    # dentro de um painel de 1150 (medido em tres assets do jh13: drv_1ebXWtW8Is,
+    # drv_1cipV29jls e hf_ampulheta). O card sairia decapitado em cima e embaixo, que e
+    # exatamente o defeito que a moldura foi criada pra acabar.
+    # Asset em pe ja preenche o painel sozinho, sem moldura nenhuma.
+    if asp < 1.05:
+        print(f"  [mockup] {os.path.basename(src)}: aspecto {asp:.2f} e vertical, "
+              f"entra sem moldura (o card nao caberia no painel)", flush=True)
+        return _fg_painel(src, W, SPLIT_TOP_H, expo)   # ja devolve [t2]...[tfg];
     nome = f"moldura_{asp:.4f}.png".replace(".", "_", 1)
     destino = os.path.join(V2L_MOLDURAS, nome)
     if not os.path.exists(destino):
@@ -622,12 +633,69 @@ def _pular_preto(src, st, dur_take):
     _PRETO_CACHE[chave] = novo_st
     return novo_st
 
+def r_insert_moldura(cfg, text, s, e, out, wt=None):
+    """Insert em TELA CHEIA com a mesma moldura de navegador do split.
+
+    Mesma regra do split: o quadro entra INTEIRO, `crop` declarado nao vale. A unica
+    diferenca e que o card ocupa o quadro todo em vez de 1150px, e nao ha apresentador
+    embaixo. Isso troca ~60% dos pixels contra o plano vizinho, que e o que faz a
+    deteccao de cena registrar o corte (o split sozinho muda 0,144 contra limiar 0,30).
+    """
+    import moldura
+    d = e - s
+    src = cfg["file"]; sp = cfg.get("speed", 1.0); st = cfg.get("start", 0)
+    st = _pular_preto(src, float(st), d * sp)
+    N = nframes(d)
+    ass = caption_ass(text, s, d, wt, cy=1700)
+    asp = _aspecto(src)
+    nome = f"moldura_cheio_{asp:.4f}.png".replace(".", "_", 1)
+    destino = os.path.join(V2L_MOLDURAS, nome)
+    # no quadro cheio o card pode ser mais largo: 92% de 1080
+    larg = int(W * 0.92) // 2 * 2
+    _antes = moldura.LARGURA_JANELA
+    moldura.LARGURA_JANELA = larg
+    try:
+        if not os.path.exists(destino):
+            moldura.png_navegador(asp, destino)
+        m = moldura.medidas(asp)
+    finally:
+        moldura.LARGURA_JANELA = _antes
+    jw, jh, cw, ch = m["janela_w"], m["janela_h"], m["canvas_w"], m["canvas_h"]
+    vx, vy = m["video_x"], m["video_y"]
+    print(f"  [mockup cheio] {os.path.basename(src)}: janela {jw}x{jh} no quadro inteiro",
+          flush=True)
+    png = destino.replace("\\", "/").replace(":", "\\:")
+    fc = (f"[0:v]setpts=PTS/{sp},tpad=stop_mode=clone:stop_duration=4,split=2[t1][t2];"
+          f"[t1]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+          f"{_eq_exposicao(cfg)}boxblur=26:1,eq=brightness=-0.14,setsar=1[bg];"
+          f"[t2]{_eq_exposicao(cfg)}scale={jw}:{jh},setsar=1[vid];"
+          f"color=black@0:s={cw}x{ch}:r={FPS},format=rgba,setsar=1[cv];"
+          f"[cv][vid]overlay={vx}:{vy}:shortest=1[card];"
+          f"movie={png},format=rgba,setsar=1[mold];"
+          f"[card][mold]overlay=0:0[fg];"
+          f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,fps={FPS},{cap(N)}{_sub(ass)}[v]")
+    run(["ffmpeg", "-y", "-ss", str(st), "-t", str(d * sp + 0.4), "-i", src,
+         "-filter_complex", fc, "-r", str(FPS), "-map", "[v]", "-an",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", out])
+
+
 def r_insert(cfg,text,s,e,out,wt=None):
     if cfg.get("split"):
         # o layout marcado pelo ritmo VENCE o `split` do config: e ele que faz a
         # visita seguinte ao mesmo asset parecer outra coisa (ver _layout no ritmo.py)
         if cfg.get("_layout") == "cheio":
-            pass                      # cai no caminho de tela cheia logo abaixo
+            # TELA CHEIA COM MOLDURA (26/08/2026). A alternancia de layout mandava o
+            # asset horizontal pro caminho antigo de tela cheia, que RECORTA: o Julio
+            # viu como "falhas de renderizacao nos cortes", e de fato o quadro saia sem
+            # moldura e com toda linha decapitada nos dois lados (medido em t=83,5s e
+            # t=85,0s: "...nos", "Integra...", "Agendar aval...").
+            # Consertar a metade e deixar a outra quebrada foi o erro que se repetiu o
+            # dia inteiro. Aqui o card entra inteiro tambem, so que MAIOR e sem o
+            # apresentador embaixo: e essa a diferenca visual que faz o corte registrar.
+            # Asset EM PE nao ganha moldura: ele ja preenche um quadro 9:16 sozinho,
+            # e a moldura so faria o card estourar (mesma guarda de _fg_painel_mockup).
+            if _aspecto(cfg["file"]) >= 1.05:
+                return r_insert_moldura(cfg, text, s, e, out, wt)
         else:
             return r_split_tela(cfg,text,s,e,out,wt)
     d=e-s; src=cfg["file"]; sp=cfg.get("speed",1.0); st=cfg.get("start",0); take=d*sp

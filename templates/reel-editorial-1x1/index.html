@@ -10,6 +10,8 @@
       @font-face { font-family:"Inter"; font-weight:300; font-style:normal; font-display:block; src:url("fonts/inter-300.woff2") format("woff2"); }
       @font-face { font-family:"Inter"; font-weight:400; font-style:normal; font-display:block; src:url("fonts/inter-400.woff2") format("woff2"); }
       @font-face { font-family:"Inter"; font-weight:600; font-style:normal; font-display:block; src:url("fonts/inter-600.woff2") format("woff2"); }
+      @font-face { font-family:"Inter"; font-weight:700; font-style:normal; font-display:block; src:url("fonts/inter-700.woff2") format("woff2"); }
+      @font-face { font-family:"Inter"; font-weight:800; font-style:normal; font-display:block; src:url("fonts/inter-800.woff2") format("woff2"); }
       @font-face { font-family:"Playfair Display"; font-weight:500; font-style:italic; font-display:block; src:url("fonts/playfair-italic-500.woff2") format("woff2"); }
       @font-face { font-family:"Playfair Display"; font-weight:600; font-style:italic; font-display:block; src:url("fonts/playfair-italic-600.woff2") format("woff2"); }
       @font-face { font-family:"Playfair Display"; font-weight:700; font-style:italic; font-display:block; src:url("fonts/playfair-italic-700.woff2") format("woff2"); }
@@ -32,19 +34,26 @@
 
       /* ---------- OPENING HOOK (editorial) ---------- */
       /* hook agora abre SOBRE a pessoa (a-roll), so um scrim pra legibilidade */
+      /* text-align:center e o conserto do defeito que o Julio pegou em 12/08: o bloco
+         estava centrado como CAIXA, mas o texto dentro dele saia alinhado a esquerda.
+         Com KEY de uma linha ninguem via; com duas linhas ficava torto.
+         O scrim tambem subiu de opacidade: o KEY branco caia sobre a camiseta do
+         Thales, que e meio-tom, e sumia. */
       #hook { position:absolute; inset:0; z-index:44;
-        background:radial-gradient(115% 34% at 50% 57%, rgba(4,5,10,.80) 0%, rgba(4,5,10,.40) 58%, rgba(4,5,10,0) 88%);
+        /* Mesma correcao do 9x16 (auditoria 12/08): scrim do hook mais leve. Fix de
+           template SEMPRE nos dois templates na mesma hora. */
+        background:radial-gradient(120% 42% at 50% 60%, rgba(4,5,10,.66) 0%, rgba(4,5,10,.44) 52%, rgba(4,5,10,0) 88%);
         display:flex; flex-direction:column; align-items:center; justify-content:center;
-        gap:4px; padding:0 100px; }
-      #hook .eyebrow { font-family:"Inter"; font-weight:400; font-size:30px; letter-spacing:8px;
-        color:rgba(255,255,255,.7); text-transform:uppercase; margin-bottom:26px;
-        text-shadow:0 2px 14px rgba(0,0,0,.65); }
+        text-align:center; gap:4px; padding:0 100px; }
+      #hook .eyebrow { font-family:"Inter"; font-weight:500; font-size:30px; letter-spacing:8px;
+        color:rgba(255,255,255,.94); text-transform:uppercase; margin-bottom:34px;
+        text-shadow:0 2px 16px rgba(0,0,0,.9); }
       #hook .l1 { font-family:"Inter"; font-weight:300; color:#fff;
         font-size:72px; line-height:1.06; letter-spacing:-.5px;
         text-shadow:0 3px 22px rgba(0,0,0,.6); }
-      #hook .accent { font-family:"Playfair Display", serif; font-weight:600; font-style:italic;
-        color:#fff; font-size:118px; line-height:1.0; letter-spacing:-1px;
-        text-shadow:0 8px 34px rgba(0,0,0,.5); }
+      #hook .accent { font-family:"Playfair Display", serif; font-variant-numeric:lining-nums; font-feature-settings:"lnum" 1; font-weight:600; font-style:italic;
+        color:#fff; font-size:118px; line-height:1.02; letter-spacing:-1px;
+        text-wrap:balance; text-shadow:0 8px 34px rgba(0,0,0,.5); }
 
       /* ---------- GRID WIPE ---------- */
       #grid-pixelate-overlay { position:absolute; inset:0; z-index:60; pointer-events:none; display:grid; }
@@ -75,7 +84,7 @@
         box-shadow:0 20px 50px rgba(0,0,0,.45); backdrop-filter:blur(8px); }
       #lt .ava { width:70px; height:70px; border-radius:50%;
         background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.28); display:flex; align-items:center;
-        justify-content:center; font-family:"Playfair Display", serif; font-style:italic; font-weight:600; font-size:38px; color:#fff; }
+        justify-content:center; font-family:"Playfair Display", serif; font-variant-numeric:lining-nums; font-feature-settings:"lnum" 1; font-style:italic; font-weight:600; font-size:38px; color:#fff; }
       #lt .name { font-family:"Inter"; font-weight:600; font-size:46px; color:#fff; line-height:1; letter-spacing:.2px; }
       #lt .role { font-family:"Inter"; font-weight:400; font-size:28px; color:rgba(255,255,255,.62); margin-top:8px; }
 
@@ -88,19 +97,36 @@
       .lett .lead { font-family:"Inter"; font-weight:400; font-size:28px; letter-spacing:6px;
         color:rgba(255,255,255,.62); text-transform:uppercase; margin-bottom:12px;
         text-shadow:0 2px 12px rgba(0,0,0,.6); }
-      .lett .key { font-family:"Playfair Display", serif; font-weight:600; font-style:italic;
+      .lett .key { font-family:"Playfair Display", serif; font-variant-numeric:lining-nums; font-feature-settings:"lnum" 1; font-weight:600; font-style:italic;
         font-size:88px; line-height:1.04; letter-spacing:-.5px; text-align:center; color:#fff;
         text-shadow:0 6px 30px rgba(0,0,0,.55); }
 
       /* ---------- CAPTIONS (legenda editorial) ---------- */
       #caps { position:absolute; inset:0; z-index:35; pointer-events:none; }
-      #caps .cgrp { position:absolute; left:0; right:0; bottom:230px; padding:0 110px;
-        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 14px; }
-      #caps .cw { font-family:"Montserrat"; font-weight:600; font-size:60px;
-        color:#fff; letter-spacing:.2px; line-height:1.3;
-        text-shadow:0 2px 8px rgba(0,0,0,.55); }
-      #caps .cw.kw { font-family:"Playfair Display", serif; font-weight:600; font-style:italic;
-        font-size:66px; letter-spacing:0; color:#fff; }
+      #caps .cgrp { position:absolute; left:0; right:0; bottom:230px; padding:26px 110px;
+        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 14px;
+        /* SEM SCRIM (27/08/2026), alinhando com o 9x16. O scrim entrou aqui em 12/08
+           e em 19/08 o 9x16 tirou o dele por ordem da Jheni ("essa sombra embaixo me
+           da panico, deixa esteticamente pobre"). O 1x1 nao acompanhou e ficou oito
+           dias com a mancha que ela reprovou: fix nao portado, agora na direcao
+           contraria. Quem garante a leitura sobre b-roll claro e o contorno por glifo
+           (paint-order acima), que e o mesmo criterio que o 9x16 ja provou. */ }
+      /* MESMA LEGENDA DO 9x16 (27/08/2026). Este template ficou pra tras no
+         redesenho de 26/08 e continuava com Montserrat 600 e palavra-chave em Playfair
+         italico MENOR que o corpo, os dois defeitos que o Julio chamou de "grosseiro".
+         Fix de template SEMPRE nos dois templates na mesma hora, e desta vez nao foi.
+         Tipografia e estados sao iguais; so o TAMANHO muda, porque o quadro 1:1 tem
+         1080 de altura contra 1920 e a mesma fonte ocuparia o dobro da tela. */
+      #caps .cw { font-family:"Inter"; font-weight:800; font-size:62px;
+        color:#F5EFE6; letter-spacing:-0.02em; line-height:1.14;
+        paint-order:stroke fill; -webkit-text-stroke:0.065em rgba(6,7,12,.92);
+        text-shadow:0 2px 5px rgba(0,0,0,.55), 0 8px 26px rgba(0,0,0,.42); }
+      #caps .cw.kw { color:#E87D4E; }
+      /* tres estados por palavra, igual ao 9x16. O piso de 0,82 nao desce: o gate-ad
+         conta texto por alpha>190 e abaixo de 0,80 ele para de enxergar a legenda. */
+      #caps .cw { opacity:.82; transform-origin:50% 82%; will-change:opacity, transform; }
+      #caps .cw.on  { opacity:1; }
+      #caps .cw.off { opacity:.90; }
       /* ---------- LOGO DO EVENTO ---------- */
       #ev-logo { position:absolute; bottom:48px; left:50%;
         width:520px; height:auto; z-index:48; filter:drop-shadow(0 8px 30px rgba(0,0,0,.55)); }
@@ -264,8 +290,15 @@
         tl.to(grp, { opacity: 1, duration: 0.12, ease: "power1.out" }, gStart);
         grp.querySelectorAll(".cw").forEach(function (span) {
           var wStart = parseFloat(span.dataset.wStart);
-          gsap.set(span, { opacity: 0, y: 8 });
-          tl.to(span, { opacity: 1, y: 0, duration: 0.16, ease: "power2.out", overwrite: "auto" }, wStart);
+          var wEnd = parseFloat(span.dataset.wEnd);
+          // dwell minimo: abaixo de 0,34s o realce vira estrobo em palavra funcional
+          if (!(wEnd > wStart + 0.34)) { wEnd = wStart + 0.34; }
+          var pico = span.classList.contains("kw") ? 1.10 : 1.05;
+          gsap.set(span, { opacity: 0.82, scale: 1, y: 8 });
+          tl.to(span, { opacity: 1, y: 0, scale: pico, duration: 0.14,
+                        ease: "power2.out", overwrite: "auto" }, wStart);
+          tl.to(span, { opacity: 0.90, scale: 1, duration: 0.22,
+                        ease: "power1.inOut", overwrite: "auto" }, wEnd);
         });
         // fade-out termina EXATAMENTE em gEnd (antes era gEnd-0.06 + 0.16s = gEnd+0.10,
         // vazava por cima do fade-in do proximo grupo e empilhava duas legendas)
@@ -310,5 +343,30 @@
 
       window.__timelines["main"] = tl;
     </script>
-  </body>
+  
+    <script>
+      /* Encolhe o KEY do gancho ate caber em no maximo duas linhas dentro da caixa.
+         Sem isso, texto longo quebra em linhas desbalanceadas e passa da margem. */
+      (function () {
+        function ajustar() {
+          var a = document.querySelector('#hook .accent');
+          if (!a) return;
+          var caixa = a.parentElement.clientWidth || 880;
+          var px = 118;
+          a.style.fontSize = px + 'px';
+          var alturaLinha = 1.02;
+          for (var i = 0; i < 26 && px > 52; i++) {
+            var linhas = Math.round(a.scrollHeight / (px * alturaLinha));
+            if (a.scrollWidth <= caixa && linhas <= 2) break;
+            px -= 4;
+            a.style.fontSize = px + 'px';
+          }
+        }
+        if (document.readyState === 'loading')
+          document.addEventListener('DOMContentLoaded', ajustar);
+        else ajustar();
+        document.fonts && document.fonts.ready && document.fonts.ready.then(ajustar);
+      })();
+    </script>
+</body>
 </html>

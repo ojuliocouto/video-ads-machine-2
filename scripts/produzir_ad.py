@@ -361,6 +361,15 @@ def gate(ad, fmt="9x16"):
             cmd = [sys.executable, str(gcol), str(finais[-1])]
             if ovl:
                 cmd += ["--overlay", str(ovl[-1])]
+            # O PLANO DE RITMO VAI JUNTO (27/08/2026). Sem ele o gate nao sabe quando o
+            # anuncio esta em tela dividida, e a caixa de rosto HERDADA de um plano de
+            # tela cheia continua valendo no painel do insert. Foi assim que o jh13
+            # reprovou com o lettering "colidindo" com uma ampulheta de areia ambar.
+            _rit = sorted(V1.glob(f"output/{pref}{ad}v2_*_footage_1x_ritmo.json"),
+                          key=lambda p: p.stat().st_mtime)
+            if _rit:
+                from build_composite import ACCEL as _acc
+                cmd += ["--ritmo", str(_rit[-1]), "--accel", str(_acc)]
             rc = subprocess.run(cmd, capture_output=True, text=True)
             print(rc.stdout, flush=True)
             if rc.returncode != 0:

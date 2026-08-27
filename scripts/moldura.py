@@ -71,11 +71,16 @@ def png_navegador(aspecto, destino, rotulo=None):
     x0, y0 = PAD_SOMBRA, PAD_SOMBRA
     x1, y1 = x0 + m["card_w"], y0 + m["card_h"]
 
-    # --- sombra: silhueta do card, borrada -------------------------------------
+    # --- sombra: sutil, so pra descolar do fundo --------------------------------
+    # ERA alpha 153 com blur 30 e deslocamento de 18px (26/08/2026). Sobre o fundo
+    # desfocado do proprio asset isso virava uma MANCHA PRETA em volta do card, e foi a
+    # primeira coisa que o Julio viu: "os assets ficaram com uma sombra preta sobre eles
+    # quando a tela ta dividida". O card ja se separa do fundo pela borda clara e pelo
+    # fundo estar borrado e escurecido: a sombra pesada so sujava.
     som = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ImageDraw.Draw(som).rounded_rectangle([x0, y0 + 18, x1, y1 + 18],
-                                          radius=RAIO, fill=(0, 0, 0, 153))
-    som = som.filter(ImageFilter.GaussianBlur(30))
+    ImageDraw.Draw(som).rounded_rectangle([x0, y0 + 6, x1, y1 + 6],
+                                          radius=RAIO, fill=(0, 0, 0, 64))
+    som = som.filter(ImageFilter.GaussianBlur(14))
 
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     img.alpha_composite(som)
