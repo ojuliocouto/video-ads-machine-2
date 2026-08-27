@@ -491,6 +491,42 @@ def main(cfg_path):
     # no peito do Thales. No split ele ocupa so a metade de baixo, entao os mesmos 545px
     # caem NOS OLHOS dele (medido no build de 18h58: faixa da legenda em y 1268-1356 e
     # os olhos em ~1200). A janela ja era coletada aqui e nunca usada pra isso.
+    # CORTAR O GRUPO NA FRONTEIRA DE LAYOUT (27/08/2026, quarta passada).
+    # Os tres criterios anteriores (comeco, meio, sobreposicao de 60%) erraram todos pelo
+    # mesmo motivo: um grupo que ATRAVESSA a troca de layout nao tem posicao boa, porque
+    # no split so a costura escapa do rosto e no avatar cheio e a costura que cai nele.
+    # Escolher um lado sempre deixa o outro errado, e a medicao provou nas duas pontas:
+    # por "meio" o "Code." pegou 3,90% do rosto, e por "60% dentro" a "pagina
+    # completamente diferente" pegou 4,2% do outro lado.
+    # Entao o grupo nao atravessa: ele vira DOIS, um de cada lado da fronteira, cada um
+    # com a classe do seu layout. E o mesmo tratamento que o lettering ja recebe, e a
+    # fala nao sofre porque a palavra continua no tempo dela.
+    if janelas_split:
+        _bordas = sorted({round(x, 3) for jan in janelas_split for x in jan})
+        _novos, _cortados = [], 0
+        for g in groups:
+            _fatias = [g]
+            for _b in _bordas:
+                _saida = []
+                for _f in _fatias:
+                    if not (_f["start"] + 0.12 < _b < _f["end"] - 0.12):
+                        _saida.append(_f); continue
+                    _ini = [w for w in _f["words"] if (w["start"] + w["end"]) / 2 < _b]
+                    _fim = [w for w in _f["words"] if (w["start"] + w["end"]) / 2 >= _b]
+                    if not _ini or not _fim:      # a fronteira nao separa palavra nenhuma
+                        _saida.append(_f); continue
+                    _saida.append({**_f, "words": _ini, "start": _f["start"],
+                                   "end": round(_ini[-1]["end"], 3)})
+                    _saida.append({**_f, "words": _fim, "start": round(_fim[0]["start"], 3),
+                                   "end": _f["end"]})
+                    _cortados += 1
+                _fatias = _saida
+            _novos.extend(_fatias)
+        if _cortados:
+            print(f"   [split] {_cortados} grupo(s) de legenda cortado(s) na fronteira de "
+                  f"layout, pra nenhum atravessar o corte", flush=True)
+        groups = _novos
+
     if janelas_split:
         # MARGEM de tolerancia (21/08/2026): grupo de legenda vem da transcricao
         # (timing da palavra), janela de split vem do ritmo.py (timing do corte). Os
