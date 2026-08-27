@@ -45,7 +45,15 @@
            segue legivel com o miolo em .66 porque o look estudio_verde ja e escuro. */
         background:radial-gradient(120% 42% at 50% 60%, rgba(4,5,10,.66) 0%, rgba(4,5,10,.44) 52%, rgba(4,5,10,0) 88%);
         display:flex; flex-direction:column; align-items:center; justify-content:center;
-        text-align:center; gap:4px; padding:0 100px; }
+        /* O HOOK NAO E `.lett` (27/08/2026). Subi o padding lateral de todas as
+           variantes de `.lett` de 90 pra 140px pra sair da coluna de botoes do Reels e
+           NAO OLHEI PRA CA: `#hook` e um elemento proprio, com padding proprio, e ficou
+           em 100px. O estrategista mediu a tinta chegando em x=1020 de t=0,00 a 2,10s,
+           com ate 4.756 pixels a direita de x=940, que e onde o app desenha curtir e
+           comentar. A linha que estoura e "COM CARA DE I.A", que e o gancho inteiro do
+           anuncio, e ela chega decapitada nos 2 segundos que decidem o scroll.
+           Enesima vez do mesmo erro no mesmo dia: eu emendo o que a busca acha. */
+        text-align:center; gap:4px; padding:0 160px; }
       #hook .eyebrow { font-family:"Inter"; font-weight:500; font-size:30px; letter-spacing:8px;
         color:rgba(255,255,255,.94); text-transform:uppercase; margin-bottom:34px;
         text-shadow:0 2px 16px rgba(0,0,0,.9); }
@@ -53,7 +61,7 @@
         font-size:72px; line-height:1.06; letter-spacing:-.5px;
         text-shadow:0 3px 22px rgba(0,0,0,.6); }
       #hook .accent { font-family:"Playfair Display", serif; font-variant-numeric:lining-nums; font-feature-settings:"lnum" 1; font-weight:600; font-style:italic;
-        color:#fff; font-size:118px; line-height:1.02; letter-spacing:-1px;
+        color:#fff; font-size:104px; line-height:1.02; letter-spacing:-1px;
         text-wrap:balance; text-shadow:0 8px 34px rgba(0,0,0,.5); }
 
       /* ---------- GRID WIPE ---------- */
@@ -160,7 +168,11 @@
       /* PILHA: lista que acumula. Sans em vez do serif italico porque isto e uma LISTA
          de itens, nao uma afirmacao unica, e alinhada a esquerda porque item de lista
          centralizado nao le como lista. Faixa entre o queixo e a legenda. */
-      .lett.lett-pilha { padding:0 140px 470px; align-items:flex-start;
+      /* 470px punha a tinta em y1176-1434, ACIMA da faixa nova, e no split as tres
+         linhas caiam dentro do painel do avatar (testa, olhos e nariz, t=60,3s).
+         Quando desci `.lett` de 560 pra 260 eu mexi em tres variantes e deixei
+         esta: quarta vez no mesmo dia que emendo um ramo so. */
+      .lett.lett-pilha { padding:0 140px 250px; align-items:flex-start;
         background:radial-gradient(84% 26% at 50% 76%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
       .lett.lett-pilha .key { font-family:"Inter"; font-style:normal; font-weight:600;
         font-size:54px; line-height:1.30; text-align:left; letter-spacing:-.2px;
@@ -236,7 +248,16 @@
          em transparente. Com 26px a elipse era cortada e virava retangulo (medido pelo
          diretor de arte no jh16: degrau de -47 em y=1224 e +99 em y=1375). */
       #caps .cgrp { position:absolute; left:0; right:0; bottom:475px; padding:96px 130px;
-        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 14px;
+        /* GAP DE 26px (27/08/2026). A tentativa anterior foi `padding-inline:10px` com
+           `margin-inline:-10px`, e o diretor mostrou que e no-op geometrico: o meu
+           proprio comentario dizia "o gap continua 14px e nada se move", que e
+           exatamente o problema. `transform:scale` acontece em torno do centro do
+           span e a tinta avanca alem da caixa com padding ou sem.
+           A conta: 14px de gap menos o contorno de 0,078em a 80px (3,12px por lado)
+           deixa 7,76px; a palavra em "dizendo" a 1,06 cresce ~7,5px por lado numa
+           palavra de 250px. Sobra 0,26px, e 16 de 63 grupos colavam.
+           26px paga o crescimento com folga e o pico desce junto. */
+        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 26px;
         /* scrim junto da sombra: mesmo tratamento que ja funciona no #cta (o unico
            elemento que a auditoria mediu com contraste bom). Radial que desvanece bem
            antes da borda pra nao virar retangulo visivel sobre o avatar escuro.
@@ -298,7 +319,8 @@
            e a palavra le como contorno oco. O scrim saiu em 19/08 por ordem da Jheni
            ("me da panico, deixa esteticamente pobre") e nao volta: `drop-shadow` segue
            o contorno do glifo, entao escurece so o que encosta na letra, sem retangulo. */
-        filter:drop-shadow(0 0 10px rgba(6,7,12,.95)) drop-shadow(0 0 3px rgba(6,7,12,.9));
+        filter:drop-shadow(0 0 14px rgba(6,7,12,.98)) drop-shadow(0 0 5px rgba(6,7,12,.95))
+               drop-shadow(0 0 2px rgba(6,7,12,.9));
         text-shadow:0 2px 5px rgba(0,0,0,.55), 0 8px 26px rgba(0,0,0,.42); }
       /* Enfase por COR, uma propriedade so: terracota da marca, o mesmo tom do
          sunburst do wordmark. Herda familia, peso, corpo, tracking e contorno.
@@ -321,8 +343,7 @@
          O padding da a reserva e o margin negativo devolve o espaco pro layout: o gap
          continua 14px e nada se move. 10px = 2,5% da palavra mais larga medida
          ("briefing", 320px de tinta a 80px, 8px por lado, com folga). */
-      #caps .cw { opacity:.82; transform-origin:50% 82%; will-change:opacity, transform;
-        padding-inline:10px; margin-inline:-10px; }
+      #caps .cw { opacity:.82; transform-origin:50% 82%; will-change:opacity, transform; }
       #caps .cw.on  { opacity:1; }
       #caps .cw.off { opacity:.90; }
       /* logo da OCC DENTRO do lettering (roteiro: "lettering + logo da occ").
@@ -572,7 +593,7 @@
           // DWELL MINIMO: palavra funcional ("de", "que", "um") dura 0,12s a 0,18s na
           // fala. Abaixo de 0,34s o realce vira estrobo, entao segura o pico.
           if (!(wEnd > wStart + 0.34)) { wEnd = wStart + 0.34; }
-          var pico = span.classList.contains("kw") ? 1.06 : 1.04;
+          var pico = span.classList.contains("kw") ? 1.04 : 1.03;
           gsap.set(span, { opacity: 0.82, scale: 1, y: 8 });
           tl.to(span, { opacity: 1, y: 0, scale: pico, duration: 0.14,
                         ease: "power2.out", overwrite: "auto" }, wStart);

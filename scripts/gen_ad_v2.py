@@ -512,7 +512,6 @@ def main(cfg_path):
         # costura pela folga, com 1,6% do rosto coberto (teto 1,5%).
         # A folga de ENTRADA continua, e ela e a que resolve o problema original: grupo
         # que comeca um pouco antes da janela abrir, quando a footage ja cortou.
-        MARGEM_SPLIT = 0.5
         n = 0
         for g in groups:
             # PELO MEIO DO GRUPO, NAO PELO COMECO (27/08/2026, segunda passada). Tirar
@@ -524,8 +523,22 @@ def main(cfg_path):
             # na posicao errada por uma fracao de segundo, e nao ha posicao que sirva
             # pros dois layouts: no split so a costura escapa do rosto, no avatar cheio
             # e justamente a costura que cai nele.
-            _meio = (g["start"] + g["end"]) / 2
-            if any(a - MARGEM_SPLIT <= _meio < b for a, b in janelas_split):
+            # POR SOBREPOSICAO, NAO POR INSTANTE (27/08/2026, terceira passada).
+            # Decidir por um PONTO dentro de um intervalo produz colisao nas duas pontas,
+            # e o diretor achou tres que sobreviveram: "Code." (75,67s) nasce e morre
+            # inteiro em avatar cheio e virou costura so porque o meio dele caiu na folga
+            # de 0,5s; "pagina completamente diferente" (27,47s) e "todo o processo"
+            # (33,42s) tem o meio dentro do split e vivem 0,3s a 0,9s fora dele, com
+            # 3,84% e 3,90% do rosto cobertos.
+            # A pergunta certa nao e "onde esta o meio" e sim "quanto desse grupo vive
+            # dentro do split": 60% ou mais, costura; menos, a posicao do avatar cheio.
+            # A folga de entrada tambem foi a zero: ela existia pra cobrir 0,3 a 0,5s de
+            # desencontro entre o timing da fala e o do corte, e a sobreposicao ja
+            # absorve isso sozinha, sem esticar a janela pra fora do split.
+            _dur_g = max(g["end"] - g["start"], 1e-6)
+            _dentro = sum(max(0.0, min(g["end"], b) - max(g["start"], a))
+                          for a, b in janelas_split)
+            if _dentro / _dur_g >= 0.60:
                 g["costura"] = True
                 g.pop("baixa", None)
                 n += 1
@@ -734,7 +747,11 @@ def main(cfg_path):
       /* SCRIM PROPRIO: com o painel de cima PREENCHIDO, o texto da propria pagina
          colidia com o hook e os dois ficavam ilegiveis. Faixa escura atras do bloco
          resolve sem escurecer o quadro inteiro. */
-      #hook.punch { padding:0 70px; justify-content:flex-start !important;
+      /* 70px punha a linha 3 do gancho ("COM CARA DE I.A") ate x993, dentro da
+         coluna de curtir/comentar do Reels, nos 2,4s que decidem o scroll. Eu tinha
+         subido o padding no TEMPLATE e nao vi que este `!important` inline vence:
+         dois lugares definem o hook, e eu emendei o que a busca achou primeiro. */
+      #hook.punch { padding:0 140px; justify-content:flex-start !important;
         /* scrim mais leve: medido, o AD13 abria 57% e o AD16 59% mais escuros
            que o resto do anuncio, e o quadro 0 e o poster no feed. O texto e caixa alta
            pesada com sombra tripla, entao aguenta bem menos fundo. */

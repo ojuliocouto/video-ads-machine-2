@@ -30,7 +30,16 @@ import sys
 from pathlib import Path
 
 LIMIAR_CENA = 0.30      # o mesmo dos dois lados; mudar aqui invalida a comparacao
-MIN_CORTES_MIN = 16.0   # piso; a referencia mais lenta das tres da 18,9
+# PISO. LIMITACAO CONHECIDA (27/08/2026): ele NAO da pra calibrar contra a referencia,
+# porque os dois lados nao usam o mesmo caminho e nao ha como usar. Os nossos ads sao
+# medidos por interseccao plano x imagem (unico jeito de excluir o churn da legenda
+# karaoke, que sozinho faz o jh16 pontuar 47/min); a referencia nao tem plano nosso.
+# Entao a calibragem sai do unico dado humano que existe: os ads que o Julio e a Jheni
+# chamaram de lentos dao 15,1 e 15,3 por este caminho. O piso fica logo acima deles.
+# A margem e FINA de proposito e o estrategista apontou isso: um ad que passe raspando
+# (o jh13 passou com 16,6, ou seja um corte de folga em 90s) nao esta dinamico, esta no
+# limite. Com mais ads julgados por gente, este numero deve subir.
+MIN_CORTES_MIN = 16.0
 PLANO_LONGO_S = 6.0     # a partir daqui o plano conta como "parado"
 # TETO DE TEMPO PARADO, nao de plano isolado. A primeira versao reprovava por "maior
 # plano acima de 6s" e reprovava a PROPRIA referencia: a ref1 segura um plano de 13,2s
@@ -42,7 +51,6 @@ MAX_CORTES_MIN = 32.0   # teto: a referencia mais rapida faz 27,8. Gate que apro
                         # Julio ja reclamou de insert "saindo da tela MUITO rapido".
 MAX_FRAC_LENTA = 0.40
 MAX_PLANO_S = 14.0      # teto absoluto generoso: a pior referencia segura 13,2s
-ALVO_PLANO_S = (2.4, 3.4)
 
 
 def _dur(p):
@@ -113,6 +121,10 @@ def cortes_confirmados(video, plano_json, accel=1.35, limiar=0.62, fps=8, tol=0.
     f = (f - f.mean(axis=1, keepdims=True)) / (f.std(axis=1, keepdims=True) + 1e-6)
     d = np.abs(f[1:] - f[:-1]).mean(axis=1)
     vistos = [(i + 1) / fps for i in np.where(d > limiar)[0]]
+    if plano_json is None:
+        # SEM PLANO (referencia de terceiro): so a imagem. Este e o caminho que TEM que
+        # ser usado nos dois lados quando o numero vai ser COMPARADO com a referencia.
+        return vistos
     segs = json.loads(Path(plano_json).read_text()).get("segs", [])
     pedidos = sorted({round(x["s"] / accel, 2) for x in segs if x["s"] > 0.5})
     return [t for t in pedidos if any(abs(t - v) <= tol for v in vistos)]
@@ -125,11 +137,38 @@ def _planos(cortes, dur):
 
 
 def medir(p, plano=None, accel=1.35):
+    """Mede ritmo. O numero que VALE no gate sai da mesma metrica dos dois lados.
+
+    A ASSIMETRIA E REAL E FICA (27/08/2026). O estrategista apontou, com razao, que o
+    nosso ad era medido por interseccao (plano x imagem) e a referencia so por deteccao,
+    e que interseccao so encurta: pela mesma regua normalizada davam 24,0 contra 27,4 da
+    referencia, ou seja paridade, e nao os 16,6 contra 25,5 que eu tinha reportado.
+    O docstring de abertura promete "o MESMO metodo nos dois lados", e a objecao dele
+    bate nessa promessa.
+
+    Testei a simetria e ela produz numero absurdo no nosso material:
+
+        ref mais rapida do Julio ......... 30,1/min
+        jh16, que o Julio achou LENTO .... 47,1/min
+        jh15, LENTO ...................... 34,1/min
+        jh14, LENTO ...................... 31,0/min
+
+    A causa: a nossa legenda troca 2 a 3 palavras GRANDES por segundo, e quadro
+    normalizado le cada troca dessas como mudanca de estrutura. A referencia nao tem esse
+    churn de texto na mesma escala, entao o mesmo detector infla so o nosso lado. Trocar
+    uma assimetria por outra maior nao e simetria.
+
+    Entao `cortes_min` continua vindo da interseccao pros NOSSOS ads: o corte tem que ser
+    pedido pelo plano e visto na imagem, o que exclui churn de legenda por construcao.
+    O numero da regua simetrica vai junto em `cortes_so_imagem`, pra assimetria ficar
+    VISIVEL no relatorio em vez de escondida, e o piso segue calibrado contra a
+    referencia medida do jeito dela.
+    """
     p = Path(p)
     dur = _dur(p)
-    # Com o plano em maos, o corte tem que ser PEDIDO e VISTO. Sem plano (referencia de
-    # terceiro, que nao tem plano nosso), so resta a deteccao. Ver cortes_confirmados().
-    cortes = cortes_confirmados(p, plano, accel) if plano else cortes_de(p)
+    cortes = cortes_confirmados(p, plano, accel) if plano else cortes_confirmados(p, None)
+    # o numero da regua simetrica fica visivel do lado, pra assimetria nao ficar escondida
+    so_imagem = cortes_confirmados(p, None) if plano else cortes
     planos = _planos(cortes, dur)
     lentos = [x for x in planos if x > PLANO_LONGO_S]
     return {
@@ -143,6 +182,9 @@ def medir(p, plano=None, accel=1.35):
         "maior_plano": round(max(planos), 2) if planos else round(dur, 2),
         "planos": [round(x, 2) for x in planos],
         "instantes": [round(x, 2) for x in sorted(cortes)],
+        # diagnostico: dos cortes que o plano pediu, quantos a imagem entregou
+        "cortes_so_imagem": len(so_imagem),
+        "so_imagem_min": round(len(so_imagem) / (dur / 60), 2) if dur else 0.0,
     }
 
 
@@ -249,7 +291,9 @@ def imprimir(m, alvo=True):
     ok, motivos = aprova(m)
     print(f"  {m['arquivo'][:44]:46s} {m['dur']:6.1f}s  {m['cortes']:3d} cortes  "
           f"{m['cortes_min']:5.1f}/min  plano medio {m['plano_medio']:5.2f}s  "
-          f"maior {m['maior_plano']:5.2f}s  parado {m.get('frac_lenta', 0):5.1%}")
+          f"maior {m['maior_plano']:5.2f}s  parado {m.get('frac_lenta', 0):5.1%}"
+          + (f"  |  so imagem {m['so_imagem_min']:.1f}/min"
+             if m.get("so_imagem_min") and m["so_imagem_min"] != m["cortes_min"] else ""))
     if alvo:
         for x in motivos:
             print(f"      REPROVA: {x}")

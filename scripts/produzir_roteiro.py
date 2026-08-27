@@ -706,8 +706,18 @@ def r_insert_moldura(cfg, text, s, e, out, wt=None):
     # fundo desfocado do asset escuro contra sala escura da quase nada: a troca de
     # layout nao registrava como corte nem pro medidor nem pro olho.
     # Chapado resolve os dois: nao repete conteudo e muda o quadro inteiro.
-    fc = (f"[0:v]setpts=PTS/{sp},tpad=stop_mode=clone:stop_duration=4[t2];"
-          f"color={DARK}:s={W}x{H}:r={FPS},setsar=1[bg];"
+    # NEM AO VIVO NEM CHAPADO (27/08/2026, terceira passada). Ao vivo o fundo piscava;
+    # chapado, o diretor mediu o card ocupando 95,9% da largura mas so 44% da altura, com
+    # 65% a 69% do quadro em preto liso: virou "tela vazia com um cardzinho no meio", ao
+    # lado do split, onde o fundo e o asset desfocado.
+    # O terceiro caminho tem as duas coisas: o asset CONGELADO num quadro (mata o
+    # estrobo) e desfocado a 60 com brilho -0,40 (mata a leitura da manchete duplicada,
+    # que era o outro motivo de eu ter chapado). Fica textura de profundidade, nao
+    # segundo video nem buraco preto.
+    fc = (f"[0:v]setpts=PTS/{sp},tpad=stop_mode=clone:stop_duration=4,split=2[t1][t2];"
+          f"[t1]trim=end_frame=1,loop=loop=-1:size=1:start=0,setpts=N/{FPS}/TB,"
+          f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+          f"boxblur=60:2,eq=brightness=-0.40:saturation=0.7,setsar=1[bg];"
           f"[t2]{_eq_exposicao(cfg)}scale={jw}:{jh},setsar=1[vid];"
           f"color=black@0:s={cw}x{ch}:r={FPS},format=rgba,setsar=1[cv];"
           f"[cv][vid]overlay={vx}:{vy}:shortest=1[card];"
