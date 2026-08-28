@@ -140,7 +140,15 @@
            anuncio, o CTA inteiro incluso. E exatamente a sombra que a Jheni reprovou:
            "me da panico, deixa esteticamente pobre".
            Tinta em y1420-1660, centro ~y1540 = 80% da altura. Raio 22% como os irmaos. */
-        background:radial-gradient(86% 22% at 50% 80%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
+        /* TELA ESMAECIDA NO LETTERING (28/08/2026, pedido do Julio por audio: "a
+           tela nao fica esmaecida e aparece ali o lettering... o lettering ta
+           frank, sumido, nao tem peso"). O lettering e o PICO: a cena inteira
+           abaixa meio tom e o texto vira o unico foco. Dim solido de tela cheia
+           em vez do radial: o radial era mancha localizada (a que a Jheni ja
+           reprovou quando ficou orfa); dim inteiro le como intencao, igual as
+           referencias CapCut. Alpha 0,55 fica abaixo de 190/255: nem o gate de
+           texto nem o de colisao contam como tinta. */
+        background:rgba(2,3,6,.55); }
       /* TELA DIVIDIDA: o insert ocupa y0-980 e o Thales y980-1920. O lettering padrao
          (560px do rodape, ou seja ~y1360) cai bem na altura do rosto dele. Aqui ele desce
          pro peito/microfone, que e a unica faixa livre entre a tela e a legenda, e o scrim
@@ -165,8 +173,8 @@
            de overlay: tinta em y937-1120, mancha em y1450-1903. E a mesma sombra
            que a Jheni ja reprovou ("me da panico, deixa esteticamente pobre"),
            agora sem nem servir pra nada. 54% e o centro da faixa nova. */
-        background:radial-gradient(86% 22% at 50% 54%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
-      .lett.lett-split .key { font-size:58px; line-height:1.10; }
+        background:rgba(2,3,6,.55); }  /* dim de tela inteira, igual a base */
+      .lett.lett-split .key { font-size:62px; line-height:1.10; }
       .lett.lett-split .lead { font-size:24px; letter-spacing:5px; margin-bottom:10px; }
       /* mesma faixa do split, mas pra bloco de avatar em CLOSE, onde o queixo desce e o
          lettering padrao pousa na boca (medido no jh13 aos 27,0s). */
@@ -174,8 +182,8 @@
          DENTRO da faixa que o Reels cobre com botao e descricao. 250px com a fonte da
          costura (58px) fecha em y1670, sob o queixo e acima do rodape do app. */
       .lett.lett-baixo { padding:0 170px 250px;
-        background:radial-gradient(86% 22% at 50% 83%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
-      .lett.lett-baixo .key { font-size:58px; line-height:1.10; }
+        background:rgba(2,3,6,.55); }  /* dim de tela inteira, igual a base */
+      .lett.lett-baixo .key { font-size:62px; line-height:1.10; }
       /* PILHA: lista que acumula. Sans em vez do serif italico porque isto e uma LISTA
          de itens, nao uma afirmacao unica, e alinhada a esquerda porque item de lista
          centralizado nao le como lista. Faixa entre o queixo e a legenda. */
@@ -184,7 +192,7 @@
          Quando desci `.lett` de 560 pra 260 eu mexi em tres variantes e deixei
          esta: quarta vez no mesmo dia que emendo um ramo so. */
       .lett.lett-pilha { padding:0 170px 250px; align-items:flex-start;
-        background:radial-gradient(84% 26% at 50% 76%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.66) 48%, transparent 80%); }
+        background:rgba(2,3,6,.55); }  /* dim de tela inteira, igual a base */
       /* PILHA DENTRO DE SPLIT (27/08/2026). `.lett.lett-pilha` e `.lett.lett-split`
          tem a MESMA especificidade (0,0,2,0) e a pilha vem depois, entao ela vencia
          e usava os 250px do avatar em tela cheia mesmo quando o quadro era split.
@@ -203,14 +211,17 @@
       .lett.lett-pilha .key::before { content:""; position:absolute; left:0; top:26px;
         width:26px; height:5px; border-radius:3px; background:#ff5a4d;
         box-shadow:0 2px 10px rgba(0,0,0,.7); }
-      .lett .lead { font-family:"Inter"; font-weight:500; font-size:30px; letter-spacing:6px;
+      .lett .lead { font-family:"Inter"; font-weight:700; font-size:32px; letter-spacing:6px;
         color:rgba(255,255,255,.92); text-transform:uppercase; margin-bottom:16px;
         text-shadow:0 2px 16px rgba(0,0,0,.95); }
       /* chave longa quebrava com a ultima palavra orfa ("OPERACAO CLAUDE / CODE").
          Corpo menor a partir de 18 caracteres faz caber na linha. */
-      .lett .key.key-longa { font-size:70px; }
-      .lett .key { font-family:"Playfair Display", serif; font-variant-numeric:lining-nums; font-feature-settings:"lnum" 1; font-weight:600; font-style:italic;
-        font-size:88px; line-height:1.04; letter-spacing:-.5px; text-align:center; color:#fff;
+      .lett .key.key-longa { font-size:82px; }
+      /* MAIS PESO (28/08/2026): "a legenda tem mais peso que o lettering". A legenda e
+         Inter 800/80px; o lettering, que e o pico, estava em 600 italico/88px e perdia.
+         Peso 700 + 104px + a tela esmaecida atras invertem a hierarquia. */
+      .lett .key { font-family:"Playfair Display", serif; font-variant-numeric:lining-nums; font-feature-settings:"lnum" 1; font-weight:700; font-style:italic;
+        font-size:104px; line-height:1.04; letter-spacing:-.5px; text-align:center; color:#fff;
         text-shadow:0 6px 30px rgba(0,0,0,.55); }
 
       /* ---------- CAPTIONS (legenda editorial) ---------- */
@@ -274,7 +285,11 @@
            deixa 7,76px; a palavra em "dizendo" a 1,06 cresce ~7,5px por lado numa
            palavra de 250px. Sobra 0,26px, e 16 de 63 grupos colavam.
            26px paga o crescimento com folga e o pico desce junto. */
-        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 26px;
+        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 42px;
+        /* gap 26->42 JUNTO com o pico de escala 1,04->1,14 (28/08/2026): o pulo maior
+           come ~11px por lado numa palavra de 320px, e a palavra que assenta ainda
+           esta acima de 1,0 quando a proxima sobe. 26px voltaria a colar palavra,
+           que foi exatamente o defeito de ontem. Mexeu na escala, mexe no gap. */
         /* scrim junto da sombra: mesmo tratamento que ja funciona no #cta (o unico
            elemento que a auditoria mediu com contraste bom). Radial que desvanece bem
            antes da borda pra nao virar retangulo visivel sobre o avatar escuro.
@@ -336,9 +351,13 @@
            e a palavra le como contorno oco. O scrim saiu em 19/08 por ordem da Jheni
            ("me da panico, deixa esteticamente pobre") e nao volta: `drop-shadow` segue
            o contorno do glifo, entao escurece so o que encosta na letra, sem retangulo. */
-        filter:drop-shadow(0 0 14px rgba(6,7,12,.98)) drop-shadow(0 0 5px rgba(6,7,12,.95))
-               drop-shadow(0 0 2px rgba(6,7,12,.9));
-        text-shadow:0 2px 5px rgba(0,0,0,.55), 0 8px 26px rgba(0,0,0,.42); }
+        /* SOMBRA LEVE (28/08/2026, Julio: "a sombra atras da legenda ta muito
+           preta"). O halo triplo que eu tinha posto pra ganhar contraste virava um
+           blob preto atras de cada palavra (visivel no print do "manual de
+           instrucoes"). CapCut usa contorno + UMA sombra macia; o contorno por glifo
+           (paint-order acima) ja garante a leitura, a sombra so assenta. */
+        filter:drop-shadow(0 4px 12px rgba(0,0,0,.40));
+        text-shadow:0 2px 4px rgba(0,0,0,.35); }
       /* Enfase por COR, uma propriedade so: terracota da marca, o mesmo tom do
          sunburst do wordmark. Herda familia, peso, corpo, tracking e contorno.
          Nao muda de tamanho de proposito: a caixa e ancorada por `bottom`, entao
@@ -612,19 +631,29 @@
         var gIn = (_colado || _semLead) ? gStart : Math.max(0, gStart - 0.12);
         _fimAnterior = gEnd;
         tl.set(grp, { visibility: "visible" }, gIn);
-        tl.to(grp, { opacity: 1, duration: 0.16, ease: "power1.out" }, gIn);
+        // POP DE GRUPO (28/08/2026, Julio por audio: "nao ta dinamico... nao ta igual
+        // as legendas do CapCut"). O fade morno + micro-pulo por palavra (1,03/1,04)
+        // lia como tremida, nao como animacao. CapCut: o grupo INTEIRO chega com um
+        // pop visivel (escala 1,22 -> 1, rapido), e a enfase por palavra vem DEPOIS,
+        // maior. So transform/opacity: nada reflui, vizinho nao mexe.
+        gsap.set(grp, { scale: 1.22, transformOrigin: "50% 80%" });
+        tl.to(grp, { opacity: 1, scale: 1, duration: 0.18, ease: "power3.out" }, gIn);
         grp.querySelectorAll(".cw").forEach(function (span) {
           var wStart = parseFloat(span.dataset.wStart);
           var wEnd = parseFloat(span.dataset.wEnd);
           // DWELL MINIMO: palavra funcional ("de", "que", "um") dura 0,12s a 0,18s na
           // fala. Abaixo de 0,34s o realce vira estrobo, entao segura o pico.
           if (!(wEnd > wStart + 0.34)) { wEnd = wStart + 0.34; }
-          var pico = span.classList.contains("kw") ? 1.04 : 1.03;
-          gsap.set(span, { opacity: 0.82, scale: 1, y: 8 });
-          tl.to(span, { opacity: 1, y: 0, scale: pico, duration: 0.14,
-                        ease: "power2.out", overwrite: "auto" }, wStart);
-          tl.to(span, { opacity: 0.90, scale: 1, duration: 0.22,
-                        ease: "power1.inOut", overwrite: "auto" }, wEnd);
+          // "as letras estao pulando mas MUITO PEQUENO" (Julio, 28/08): 1,03 de
+          // escala e jitter, nao enfase. Palavra ativa salta 14% (18% a kw) com
+          // overshoot de back.out: pulo unico e visivel, estilo CapCut, e assenta.
+          // O dwell minimo acima impede o estrobo em palavra curta.
+          var pico = span.classList.contains("kw") ? 1.18 : 1.14;
+          gsap.set(span, { opacity: 0.85, scale: 1, transformOrigin: "50% 85%" });
+          tl.to(span, { opacity: 1, scale: pico, duration: 0.16,
+                        ease: "back.out(2.2)", overwrite: "auto" }, wStart);
+          tl.to(span, { opacity: 0.92, scale: 1, duration: 0.20,
+                        ease: "power2.inOut", overwrite: "auto" }, wEnd);
         });
         // fade-out termina EXATAMENTE em gEnd (antes era gEnd-0.06 + 0.16s = gEnd+0.10,
         // vazava por cima do fade-in do proximo grupo e empilhava duas legendas)

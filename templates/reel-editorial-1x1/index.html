@@ -93,18 +93,18 @@
       .lett { position:absolute; inset:0; z-index:34; pointer-events:none;
         display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
         gap:6px; padding:0 100px 300px;
-        background:radial-gradient(58% 18% at 50% 66%, rgba(0,0,0,.5), transparent 74%); }
+        background:rgba(2,3,6,.55);  /* tela esmaecida no pico, igual 9x16 (28/08) */ }
       .lett .lead { font-family:"Inter"; font-weight:400; font-size:28px; letter-spacing:6px;
         color:rgba(255,255,255,.62); text-transform:uppercase; margin-bottom:12px;
         text-shadow:0 2px 12px rgba(0,0,0,.6); }
-      .lett .key { font-family:"Playfair Display", serif; font-variant-numeric:lining-nums; font-feature-settings:"lnum" 1; font-weight:600; font-style:italic;
-        font-size:88px; line-height:1.04; letter-spacing:-.5px; text-align:center; color:#fff;
+      .lett .key { font-family:"Playfair Display", serif; font-variant-numeric:lining-nums; font-feature-settings:"lnum" 1; font-weight:700; font-style:italic;
+        font-size:100px; line-height:1.04; letter-spacing:-.5px; text-align:center; color:#fff;
         text-shadow:0 6px 30px rgba(0,0,0,.55); }
 
       /* ---------- CAPTIONS (legenda editorial) ---------- */
       #caps { position:absolute; inset:0; z-index:35; pointer-events:none; }
       #caps .cgrp { position:absolute; left:0; right:0; bottom:230px; padding:26px 110px;
-        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 14px;
+        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 36px;  /* pico 1,14 come o vao: gap acompanha (28/08) */
         /* SEM SCRIM (27/08/2026), alinhando com o 9x16. O scrim entrou aqui em 12/08
            e em 19/08 o 9x16 tirou o dele por ordem da Jheni ("essa sombra embaixo me
            da panico, deixa esteticamente pobre"). O 1x1 nao acompanhou e ficou oito
@@ -293,7 +293,7 @@
           var wEnd = parseFloat(span.dataset.wEnd);
           // dwell minimo: abaixo de 0,34s o realce vira estrobo em palavra funcional
           if (!(wEnd > wStart + 0.34)) { wEnd = wStart + 0.34; }
-          var pico = span.classList.contains("kw") ? 1.10 : 1.05;
+          var pico = span.classList.contains("kw") ? 1.18 : 1.14;  // igual ao 9x16, 28/08
           gsap.set(span, { opacity: 0.82, scale: 1, y: 8 });
           tl.to(span, { opacity: 1, y: 0, scale: pico, duration: 0.14,
                         ease: "power2.out", overwrite: "auto" }, wStart);

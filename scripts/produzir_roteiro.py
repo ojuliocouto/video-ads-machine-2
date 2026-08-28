@@ -393,13 +393,23 @@ def _eq_exposicao(cfg):
                       f"subindo de {ex:.2f} para {piso:.2f} (alvo {ALVO_LUM})", flush=True)
                 ex = piso
         elif lum is not None and lum > TETO_LUM:
-            # O valor declarado no JSON vale como MINIMO so quando o asset e escuro.
-            # Numa fonte de 193/255 o `exposicao: 0.18` declarado a mao empurrava a
-            # pagina branca pra ainda mais branca: aqui o teto vence o declarado.
-            teto = max((TETO_LUM - lum) / 255.0, EXPO_MIN)
-            print(f"  [exposicao] {os.path.basename(src)}: fonte em {lum:.0f}/255, "
-                  f"baixando de {ex:.2f} para {teto:.2f} (teto {TETO_LUM})", flush=True)
-            ex = teto
+            # TETO REMOVIDO (28/08/2026, print do Julio). O teto escurecia pagina branca
+            # PERMANENTEMENTE (244 -> 188 = cinza), e mesmo depois de consertar o
+            # contraste o resultado seguia "um filtro cinza em cima dos inserts, tudo
+            # meio palido". Eu declarei o cinza removido e ele nao estava: consertei o
+            # sintoma acoplado (contraste) e mantive a causa (brightness negativo).
+            # Pagina branca fica BRANCA. O teto so ZERA exposicao declarada pra cima
+            # (clarear o que ja e branco continua errado); nunca escurece.
+            # O flash de brilho no corte (o motivo do teto existir) fica como custo
+            # aceito: era apontamento de auditor com alvo de 90 niveis, nao reclamacao
+            # do Julio, e o conserto errado custou o defeito que ele VIU. Se um dia
+            # incomodar de verdade, o caminho e rampa por `sendcmd` no eq (o eq NAO
+            # avalia expressao por quadro: medido, `if(lt(t,...))` congela no t=0),
+            # nunca filtro permanente.
+            if ex > 0:
+                print(f"  [exposicao] {os.path.basename(src)}: fonte em {lum:.0f}/255 "
+                      f"ja e clara, zerando exposicao declarada de {ex:.2f}", flush=True)
+                ex = 0.0
     if abs(ex) < 0.005:
         return ""
     # CONTRASTE NUNCA CAI (27/08/2026). A formula era `1 + ex*0.6`, escrita quando `ex`
@@ -1230,7 +1240,11 @@ for _b, (_s, _e) in zip(blocks, spans):
     _entrada.append({"tipo": "insert" if _b["type"] == "insert" else "orig",
                      "s": _s, "e": _e,
                      "crop": (_cfg or {}).get("crop"),
-                     "dur_max": (_cfg or {}).get("dur_max")})
+                     "dur_max": (_cfg or {}).get("dur_max"),
+                     # a fala do bloco: o ritmo trava o insert quando ela aponta pra
+                     # tela ("...que voce ta vendo NA TELA" com o quadro no avatar,
+                     # print do Julio 28/08). Nos QUATRO chamadores, ou desencontra.
+                     "texto": _b.get("narr", "")})
 _plano = _R.plano_de_ritmo(_entrada)
 
 _nb, _ns, _nw = [], [], []

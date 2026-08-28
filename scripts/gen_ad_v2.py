@@ -190,7 +190,8 @@ def main(cfg_path):
         _entrada_ritmo.append({"tipo": "insert" if _b["type"] == "insert" else "orig",
                                "s": _s, "e": _e,
                                "crop": (_c or {}).get("crop"),
-                               "dur_max": (_c or {}).get("dur_max")})
+                               "dur_max": (_c or {}).get("dur_max"),
+                               "texto": _b.get("narr", "")})
     _plano_ritmo = _R.plano_de_ritmo(_entrada_ritmo)
     _res_ritmo = _R.resumo(_plano_ritmo, spans[-1][1])
     print(f"   [ritmo] {len(_plano_ritmo)} planos | {_res_ritmo['cortes_min']:.1f} "
@@ -540,6 +541,15 @@ def main(cfg_path):
     # com a classe do seu layout. E o mesmo tratamento que o lettering ja recebe, e a
     # fala nao sofre porque a palavra continua no tempo dela.
     if janelas_split:
+        # BANDA DE GUARDA NA FRONTEIRA (28/08/2026). Os dois motores nao batem o
+        # relogio: o overlay fecha o split do b2 em 14,37 e a FOOTAGE so sai dele em
+        # 14,45 (e a deriva cresce: footage 120,90s contra overlay 121,97s no jh13).
+        # Cortar o grupo a 0,02s da borda confia num relogio unico que nao existe:
+        # "profissionais." nascia em 14,40 no rodape e por 0,08s caia NOS OLHOS do
+        # apresentador, que na footage ainda estava em split (gate pegou: 8,8% do
+        # rosto em t=10,5s). A guarda de 0,25s cobre a deriva medida nos dois
+        # sentidos; a palavra continua no tempo dela, so a JANELA VISIVEL encolhe.
+        GUARDA_MOTOR = 0.25
         _bordas = sorted({round(x, 3) for jan in janelas_split for x in jan})
         _novos, _cortados = [], 0
         for g in groups:
@@ -559,10 +569,10 @@ def main(cfg_path):
                         _antes = _b - _f["start"]
                         _depois = _f["end"] - _b
                         if _antes >= _depois and _antes >= 0.30:
-                            _saida.append({**_f, "end": round(_b - 0.02, 3)})
+                            _saida.append({**_f, "end": round(_b - GUARDA_MOTOR, 3)})
                             _cortados += 1
                         elif _depois > _antes and _depois >= 0.30:
-                            _saida.append({**_f, "start": round(_b + 0.02, 3)})
+                            _saida.append({**_f, "start": round(_b + GUARDA_MOTOR, 3)})
                             _cortados += 1
                         else:
                             _saida.append(_f)
@@ -583,10 +593,10 @@ def main(cfg_path):
                         _antes = _b - _f["start"]
                         _depois = _f["end"] - _b
                         if _antes >= _depois and _antes >= 0.30:
-                            _saida.append({**_f, "end": round(_b - 0.02, 3)})
+                            _saida.append({**_f, "end": round(_b - GUARDA_MOTOR, 3)})
                             _cortados += 1
                         elif _depois > _antes and _depois >= 0.30:
-                            _saida.append({**_f, "start": round(_b + 0.02, 3)})
+                            _saida.append({**_f, "start": round(_b + GUARDA_MOTOR, 3)})
                             _cortados += 1
                         else:
                             _saida.append(_f)
@@ -598,8 +608,8 @@ def main(cfg_path):
                     # entao a fatia continuava atravessando (57,5% dentro) e levava a
                     # posicao do avatar cheio pro rosto do split. Cortar e parar na
                     # fronteira sao a mesma coisa; fazer so metade nao resolve nada.
-                    _fim_ini = round(min(_ini[-1]["end"], _b - 0.02), 3)
-                    _ini_fim = round(max(_fim[0]["start"], _b + 0.02), 3)
+                    _fim_ini = round(min(_ini[-1]["end"], _b - GUARDA_MOTOR), 3)
+                    _ini_fim = round(max(_fim[0]["start"], _b + GUARDA_MOTOR), 3)
                     # PISO TAMBEM NESTE RAMO (27/08/2026, achado do diretor de arte). O
                     # piso de 0,30s so valia no ramo de APARAR (grupo de uma palavra); o
                     # ramo de CORTAR EM DUAS nao tinha piso nenhum, mesmo erro de "um
@@ -613,10 +623,10 @@ def main(cfg_path):
                         _antes = _b - _f["start"]
                         _depois = _f["end"] - _b
                         if _antes >= _depois and _antes >= 0.30:
-                            _saida.append({**_f, "end": round(_b - 0.02, 3)})
+                            _saida.append({**_f, "end": round(_b - GUARDA_MOTOR, 3)})
                             _cortados += 1
                         elif _depois > _antes and _depois >= 0.30:
-                            _saida.append({**_f, "start": round(_b + 0.02, 3)})
+                            _saida.append({**_f, "start": round(_b + GUARDA_MOTOR, 3)})
                             _cortados += 1
                         else:
                             _saida.append(_f)
@@ -639,7 +649,10 @@ def main(cfg_path):
         # do rosto do painel de baixo. 5,6% de cobertura em t=33,5s.
         # Cortar o grupo nao resolve isso: o que atravessa e a ANIMACAO, nao o grupo.
         for g in _novos:
-            if any(abs(g["start"] - x) < 0.16 for jan in janelas_split for x in jan):
+            # 0,16 -> 0,35 (28/08): a janela tem que cobrir a GUARDA_MOTOR + o lead de
+            # 0,12s, senao o grupo empurrado pra 0,25s da borda volta a antecipar por
+            # cima da troca de layout que a footage ainda nao fez.
+            if any(abs(g["start"] - x) < 0.35 for jan in janelas_split for x in jan):
                 g["sem_lead"] = True
         groups = _novos
 
@@ -1035,6 +1048,10 @@ def main(cfg_path):
                  "texto": {k: v for k, v in (cfg.get("hook") or {}).items()}},
         "cta": {"inicio": cta_s, "logo": logo_s, "label": cfg.get("cta_label", "")},
         "blocos": [{"i": i, "tipo": blocks[i]["type"], "instr": blocks[i]["instr"],
+                    # a fala vai junto: quem reconstroi o plano de ritmo a partir da
+                    # prancha (som, medidor) precisa do mesmo criterio de deixis que
+                    # os motores usaram, senao o plano deles diverge do renderizado.
+                    "texto": blocks[i].get("narr", ""),
                     "s": round(float(a), 2), "e": round(float(b), 2),
                     "dur": round(float(b - a), 2)}
                    for i, (a, b) in enumerate(spans)],

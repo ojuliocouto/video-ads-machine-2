@@ -53,6 +53,30 @@ LAYOUTS_INSERT = ("split", "cheio")
 # (oficial_13) a base 1.28 empurrou o queixo do Thales pra cima da legenda (gate de
 # colisao, jh14 t=18s). Amplitude pequena respira sem invadir texto.
 BASES_PUNCH = (1.0, 1.06, 1.12)
+
+# FALA QUE APONTA PRA TELA TRAVA O INSERT NA TELA (28/08/2026, print do Julio).
+# O Thales diz "A skill e essa que voce ta vendo NA TELA" e a alternancia ja tinha
+# devolvido o quadro pro avatar: o espectador ouve "olha isso" olhando pra cara do
+# apresentador. No print seguinte, "Ela e um manual de instrucoes que da ao Claude
+# regras..." com o insert (que E o manual) sumindo no meio da explicacao.
+# A alternancia existe pra dar ritmo a bloco onde a fala nao depende da imagem.
+# Quando a copy REFERENCIA a imagem (deixis: "na tela", "isso aqui", "da uma olhada")
+# ou o bloco comeca apontando pra ela ("Ela e...", "Esse..."), a imagem manda:
+# o insert cobre o bloco inteiro, sem respiro de rosto e sem fatiar.
+# Regra da casa que ja existia por escrito e o motor ignorava: a copy manda a
+# direcao do bloco.
+import re as _re
+_DEITICOS = _re.compile(
+    r"na tela|nisso aqui|isso aqui|esse aqui|essa aqui|aqui na|"
+    r"d[aá] uma olhada|olha (isso|s[oó]|aqui)|ta vendo|t[aá] vendo",
+    _re.IGNORECASE)
+_ANAFORA = _re.compile(r"^\s*(ela|ele|isso|esse|essa)\b", _re.IGNORECASE)
+
+
+def bloco_deitico(texto):
+    """A fala deste bloco aponta pra imagem? Entao a imagem nao pode sair da tela."""
+    t = (texto or "").strip()
+    return bool(t) and bool(_DEITICOS.search(t) or _ANAFORA.match(t))
 # janela do hook em tempo de FOOTAGE (~3s entregues a 1,35x). No bloco 0 a imagem e
 # SEMPRE insert ate aqui: o hook e desenhado sobre o fundo de abertura, e um respiro
 # de rosto nessa janela poe o texto na cara do apresentador (gate pegou no jh13).
@@ -133,6 +157,19 @@ def plano_de_ritmo(blocos):
                     resto["_off_extra"] = 0.0
             fila.insert(k_f, resto)
             idx_orig.insert(k_f, i)
+            continue
+
+        # BLOCO DEITICO NAO ALTERNA (28/08/2026). Se a fala aponta pra imagem, o
+        # insert cobre o bloco inteiro: sem fatia, sem respiro de rosto, sem dur_max
+        # (os blocos com dur_max desta leva nao sao deiticos; se um dia coincidirem,
+        # a deixis vence, porque mostrar o que a fala aponta importa mais que o cap).
+        # O custo em cortes/min e pago pelos blocos nao-deiticos.
+        if tipo == "insert" and bloco_deitico(b.get("texto")) and not b.get("_pos_hook"):
+            segs.append({"bloco": i, "tipo": "insert", "s": round(s, 3),
+                         "e": round(e, 3), "crop": b.get("crop"),
+                         "sub": 0, "de": 1,
+                         "layout": _forcado or "split", "fonte_off": 0.0,
+                         "deitico": True})
             continue
 
         # cap declarado: a fonte do insert acaba antes do bloco. A versao antiga

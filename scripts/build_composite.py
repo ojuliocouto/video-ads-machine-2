@@ -155,7 +155,8 @@ def mixar_som(video, ad, workdir):
                 n += 1
             blocos.append({"tipo": "insert" if b["tipo"] == "insert" else "orig",
                            "s": b["s"], "e": b["e"],
-                           "crop": cfg.get("crop"), "dur_max": cfg.get("dur_max")})
+                           "crop": cfg.get("crop"), "dur_max": cfg.get("dur_max"),
+                           "texto": b.get("texto", "")})
         segs = RT.plano_de_ritmo(blocos)
         eventos = SC.plano_de_som(segs, ACCEL, cta=pr.get("cta", {}).get("inicio"))
     except Exception as ex:
