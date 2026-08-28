@@ -423,6 +423,29 @@ def main(cfg_path):
     lett_windows = [(l["start"], l["start"] + l["dur"]) for l in letts]
     for i, l in enumerate(letts):
         l["id"] = f"lett{chr(65 + i)}"
+    # O RELOGIO QUE VALE E O DA FOOTAGE (28/08/2026). Os dois motores derivam os spans
+    # por caminhos diferentes e NAO batem: no jh13, o overlay fecha o split do b2 em
+    # 14,37 e a footage so sai dele em 14,45, com a deriva crescendo ao longo do video
+    # (footage 120,90s vs overlay 121,97s). Toda decisao de POSICAO de texto e sobre o
+    # que esta NA TELA, e quem poe na tela e a footage: quando o json dela existe (e o
+    # plano dela e deterministico, entao o do build anterior vale), as janelas de split
+    # vem DE LA. A banda de guarda vira residuo (arredondamento), nao conserto de
+    # deriva. Primeira rodada de um ad novo ainda usa o proprio plano: o build seguinte
+    # ja converge, e o gate de colisao pega o intervalo se ele importar.
+    try:
+        _fj = V1 / "output" / f"{ad}_{look}_footage_1x_ritmo.json"
+        if _fj.exists():
+            _fsegs = json.loads(_fj.read_text()).get("segs", [])
+            _jf = [(round(x["s"], 2), round(x["e"], 2))
+                   for x in _fsegs if x.get("layout") == "split"]
+            if _jf:
+                print(f"   [relogio] janelas de split da FOOTAGE ({_fj.name}): "
+                      f"{len(_jf)} janelas no lugar das {len(janelas_split)} do overlay",
+                      flush=True)
+                janelas_split = _jf
+    except Exception as _e:
+        print(f"   [relogio] footage json ilegivel ({_e}); seguindo com o do overlay",
+              flush=True)
     # rastro de deconflito: sem isso nao da pra saber se a flag chegou (perdi um build
     # inteiro achando que o CSS estava errado quando a janela e que estava vazia)
     print(f"   [deconflito] split={janelas_split} texto={janelas_texto} "
@@ -549,7 +572,8 @@ def main(cfg_path):
         # apresentador, que na footage ainda estava em split (gate pegou: 8,8% do
         # rosto em t=10,5s). A guarda de 0,25s cobre a deriva medida nos dois
         # sentidos; a palavra continua no tempo dela, so a JANELA VISIVEL encolhe.
-        GUARDA_MOTOR = 0.25
+        # com as janelas vindas da footage a guarda cobre so arredondamento
+        GUARDA_MOTOR = 0.12
         _bordas = sorted({round(x, 3) for jan in janelas_split for x in jan})
         _novos, _cortados = [], 0
         for g in groups:
@@ -735,9 +759,33 @@ def main(cfg_path):
                 return True
         return False
 
-    groups = [g for g in groups
-              if not any(g["start"] < we and g["end"] > ws for ws, we in lett_windows)
-              and not _echoes_lettering(g)]
+    # APARAR NA JANELA DO LETTERING, NAO DESCARTAR O GRUPO (28/08/2026). O filtro
+    # antigo jogava fora o grupo INTEIRO se ele encostasse em qualquer janela de
+    # lettering: entre "UMA NOVA OFERTA" e "MESMA HISTORIA" sobravam 1,54s de fala sem
+    # nenhum texto na tela, e vaos como esse somavam 12% (o teto do gate) com o
+    # estrategista apontando exatamente essa janela como a virada da dor rodando muda.
+    # O eco (mesma frase no lettering E na legenda) continua descartado por inteiro.
+    _aparados = []
+    for g in groups:
+        if _echoes_lettering(g):
+            continue
+        fatias = [dict(g)]
+        for ws, we in sorted(lett_windows):
+            prox = []
+            for f in fatias:
+                if not (f["start"] < we and f["end"] > ws):
+                    prox.append(f); continue
+                antes = {**f, "end": round(min(f["end"], ws - 0.05), 3)}
+                depois = {**f, "start": round(max(f["start"], we + 0.05), 3)}
+                for peca in (antes, depois):
+                    peca["words"] = [w for w in f["words"]
+                                     if peca["start"] <= (w["start"] + w["end"]) / 2
+                                     <= peca["end"]]
+                    if peca["end"] - peca["start"] >= 0.30 and peca["words"]:
+                        prox.append(peca)
+            fatias = prox
+        _aparados.extend(fatias)
+    groups = _aparados
     caps_html = build_timeline._render_captions_html(groups)
 
     # ATENCAO: o HTML do lettering e montado AQUI, inline, e NAO pelo build_timeline. Eu
