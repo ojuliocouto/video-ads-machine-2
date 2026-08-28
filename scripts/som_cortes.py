@@ -26,28 +26,49 @@ SOM = ASSETS_V1 / "som"
 SR = 48000
 
 # nome -> (duração, cadeia de síntese)
-# volume final calibrado pro pico ficar entre -18 e -10 dBFS: presente na mixagem com
-# ducking leve, mas nunca competindo com a voz (contrato no test_som_cortes.py).
+#
+# CALIBRAGEM POR NIVEL ABSOLUTO, PORQUE O EFEITO TOCA NO SILENCIO (27/08/2026).
+# O Julio: "tem um som ridiculo nas transicoes, parece um tiro".
+#
+# A primeira hipotese foi "esta competindo com a voz", e a MEDICAO DERRUBOU ela: o
+# whoosh isolado esta em -24,6 dBFS, abaixo da voz em -17,9. Comparando a janela do
+# efeito com a fala vizinha eu tinha achado +5 a +8 dB, mas essa comparacao e enviesada,
+# porque o whoosh cai exatamente nos CORTES, e corte coincide com mudanca de fala.
+#
+# A medicao que explicou: energia na banda do whoosh (300-2400 Hz) no instante do efeito
+# contra 0,7s antes, deu +40, +46 e +51 dB em varios deles. Numeros absurdos porque o
+# "antes" e SILENCIO: o efeito nao briga com a voz, ele APARECE SOZINHO numa pausa. Um
+# ruido rosa de 0,45s surgindo no silencio a -24 dBFS e um estalo bem marcado.
+#
+# Entao o contrato nao e relativo a voz, e absoluto: o efeito precisa ser discreto
+# TOCANDO SOZINHO.
+#
+# DUAS ANCORAS HUMANAS, uma de cada lado, as duas medidas no mesmo whoosh:
+#     RMS -40,2 dBFS  (volume=-14dB)  ->  INAUDIVEL, defeito de 20/08
+#     RMS -27,2 dBFS  (volume= -1dB)  ->  "parece um tiro", defeito de 27/08
+# Alvo: -34 dBFS, o meio. Faixa aceita: -38 a -31, travada em test_nivel_som.py.
+#
+# A faixa ANTERIOR daquele teste era -30 a -20, e ela PERMITIA o defeito: os -27,2 que
+# o Julio reprovou cabiam dentro dela com folga. Um teste que passa verde no material
+# que o cliente reprova esta calibrado errado, nao "quase certo".
 EFEITOS = {
     # varredura de ruído rosa com envelope: leitura de "ar" passando, sem cauda longa
     "whoosh.wav": (0.45,
         "anoisesrc=color=pink:sample_rate=48000:amplitude=0.7,"
         "highpass=f=300,lowpass=f=2400,"
         "afade=t=in:st=0:d=0.12:curve=qsin,afade=t=out:st=0.18:d=0.27:curve=qsin,"
-        "volume=-1dB"),          # calibrado por MEDICAO: -14dB dava RMS -40,5 dBFS, ou
-                             # seja 26 dB abaixo da voz. Inaudivel, "existia" so no
-                             # arquivo. Ver test_som_cortes.py, faixa audivel.
+        "volume=-7dB"),          # era -1dB. Ver calibragem por medicao no topo.
     # clique curto: seno agudo com decaimento seco, pra pontuar numeração/lista
     "tick.wav": (0.07,
         "sine=frequency=1750:sample_rate=48000,"
         "afade=t=in:st=0:d=0.004,afade=t=out:st=0.012:d=0.055:curve=exp,"
-        "volume=+1dB"),          # idem: -13dB dava -41,8 dBFS
+        "volume=-5dB"),          # era +1dB
     # chirp ascendente 180->760 Hz: tensão subindo antes da virada/CTA
     "riser.wav": (1.20,
         "aevalsrc=exprs='0.55*sin(2*PI*(180*t+241.7*t*t))':sample_rate=48000:duration=1.2,"
         "highpass=f=120,"
         "afade=t=in:st=0:d=0.25:curve=qsin,afade=t=out:st=0.95:d=0.25:curve=qsin,"
-        "volume=-12dB"),
+        "volume=-25dB"),         # era -12dB: o mais alto dos tres, e cai no CTA.
 }
 
 

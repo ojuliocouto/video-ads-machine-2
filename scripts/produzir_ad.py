@@ -354,6 +354,12 @@ def gate(ad, fmt="9x16"):
             if _rj:
                 from build_composite import ACCEL as _acc2
                 _cmd += ["--ritmo-json", str(_rj[-1]), "--accel", str(_acc2)]
+                _tj2 = V1 / "output" / "timing.json"
+                if _tj2.exists():
+                    try:
+                        _cmd += ["--a0", str(json.loads(_tj2.read_text()).get("a0", 0.0))]
+                    except Exception:
+                        pass
             _rr = subprocess.run(_cmd, capture_output=True, text=True)
             print(_rr.stdout, flush=True)
             if _rr.returncode != 0:

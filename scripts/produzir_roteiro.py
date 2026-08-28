@@ -306,6 +306,41 @@ TETO_LUM = 185.0
 EXPO_MIN = -0.22     # luminancia media alvo do painel; os inserts bons caem entre 83 e 100
 EXPO_MAX = 0.45     # teto: acima disso a fonte escura vira cinza lavado
 _CACHE_LUM = {}
+_CACHE_LUM_MED = {}
+
+
+def _luminancia_mediana_fonte(src, start=0.0):
+    """Mediana de luminancia da fonte, medida no mesmo quadro que `_luminancia_fonte`.
+
+    So pro `_bg_offset` (27/08/2026, achado do diretor de arte). A MEDIA mente em asset
+    BIMODAL: um insert do jh13 deu media 64,0 mas mediana 33,0 (p10=16, p90=245), ou
+    seja a maior parte do quadro e fundo escuro e uma area pequena e pagina bem clara. O
+    offset calculado sobre a media ficava fraco demais pro fundo de verdade, e sobrou um
+    trecho de 4,4s com 49% do quadro em preto absoluto, bem antes do CTA.
+    Boxblur preserva a media (e convolucao linear), mas NAO preserva a mediana: apos o
+    desfoque a imagem se parece com o que a MAIORIA da area já era, nao com a media
+    puxada pela minoria clara. Por isso o alvo de fundo tem que mirar a mediana.
+    Nao troco `_luminancia_fonte`: ela alimenta `_eq_exposicao` (piso/teto do CARD),
+    que ja esta calibrado e testado com a media; mudar o significado dela ali sem
+    remedir teria efeito colateral fora do escopo deste defeito.
+    """
+    if src in _CACHE_LUM_MED:
+        return _CACHE_LUM_MED[src]
+    val = None
+    try:
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            q = os.path.join(td, "l.png")
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(start + 1.5),
+                            "-i", src, "-frames:v", "1", q], capture_output=True, timeout=60)
+            if os.path.exists(q):
+                im = Image.open(q).convert("L")
+                px = sorted(im.getdata())
+                val = px[len(px) // 2]
+    except Exception:
+        val = None
+    _CACHE_LUM_MED[src] = val
+    return val
 
 
 def _luminancia_fonte(src, start=0.0):
@@ -367,7 +402,16 @@ def _eq_exposicao(cfg):
             ex = teto
     if abs(ex) < 0.005:
         return ""
-    return f"eq=brightness={ex:.3f}:contrast={1 + ex * 0.6:.3f},"
+    # CONTRASTE NUNCA CAI (27/08/2026). A formula era `1 + ex*0.6`, escrita quando `ex`
+    # SO PODIA SER POSITIVO (o piso, que clareia asset escuro): clarear lava a imagem,
+    # entao subir o contraste junto compensa. Quando adicionei o TETO hoje de manha, `ex`
+    # passou a poder ser negativo e a mesma formula virou REDUCAO de contraste: os assets
+    # claros (193 a 244 de luminancia) saiam com contrast 0,87 a 0,98, ou seja escurecidos
+    # E lavados ao mesmo tempo. O Julio viu na hora: "uma merda de filtro cinza em cima
+    # dos inserts, fica tudo meio palido".
+    # Mexer num lado do calculo e nao revisar a formula acoplada a ele: o mesmo padrao
+    # do dia. `abs(ex)` faz clarear e escurecer preservarem contraste por igual.
+    return f"eq=brightness={ex:.3f}:contrast={1 + abs(ex) * 0.6:.3f},"
 
 
 def _crop_fonte(cfg):
@@ -671,11 +715,14 @@ def _bg_offset(src, cfg):
     Fixo nao serve porque o material varia de 33 a 244 de luminancia. Aqui o alvo e
     medido: o fundo pousa em ~30/255, escuro o bastante pra nao competir com o card e
     claro o bastante pra ler como cenario em vez de buraco.
+
+    MEDIANA, NAO MEDIA (27/08/2026, segunda passada). A media mente em asset bimodal
+    (fundo escuro + area pequena bem clara): dava offset fraco demais e sobrava
+    trecho em preto quase absoluto. Ver `_luminancia_mediana_fonte`.
     """
-    lum = _luminancia_fonte(src, float(cfg.get("start", 0) or 0))
+    lum = _luminancia_mediana_fonte(src, float(cfg.get("start", 0) or 0))
     if lum is None:
         return -0.20
-    # o boxblur nao muda a media, entao a conta vale sobre a luminancia da fonte
     off = max(-0.40, min(0.16, (ALVO_BG_CHEIO - lum) / 255.0))
     print(f"  [fundo cheio] {os.path.basename(src)}: fonte em {lum:.0f}/255, "
           f"offset {off:+.3f} (alvo {ALVO_BG_CHEIO:.0f})", flush=True)

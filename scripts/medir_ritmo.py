@@ -76,7 +76,7 @@ def cortes_de(p):
     return [float(m) for m in re.findall(r"pts_time:([0-9.]+)", r.stdout + r.stderr)]
 
 
-def cortes_confirmados(video, plano_json, accel=1.35, limiar=0.62, fps=8, tol=0.45):
+def cortes_confirmados(video, plano_json, accel=1.35, limiar=0.62, fps=8, tol=0.45, a0=0.0):
     """Cortes que o plano PEDIU e que a imagem de fato entrega.
 
     Nasceu de duas medicoes que se contradiziam no mesmo arquivo (27/08/2026):
@@ -125,8 +125,15 @@ def cortes_confirmados(video, plano_json, accel=1.35, limiar=0.62, fps=8, tol=0.
         # SEM PLANO (referencia de terceiro): so a imagem. Este e o caminho que TEM que
         # ser usado nos dois lados quando o numero vai ser COMPARADO com a referencia.
         return vistos
+    # O `a0` FALTAVA AQUI TAMBEM (27/08/2026). O composite aplica `setpts=PTS-a0/TB`
+    # na footage: plano = entregue*accel + a0, e a volta e (plano-a0)/accel. Sem
+    # subtrair, cada alvo do plano fica adiantado (com a0=0,24 e accel=1,35, 0,178s,
+    # que come 40% da tolerancia de 0,45s). E o MESMO esquecimento que ja tinha
+    # corrigido no gate de colisao, e ficou de fora daqui: neste jh13 nao mudou o
+    # resultado (27 casados nos dois jeitos, o estrategista testou e confirmou), mas o
+    # erro fica LATENTE pra qualquer ad com a0 maior ou tolerancia mais apertada.
     segs = json.loads(Path(plano_json).read_text()).get("segs", [])
-    pedidos = sorted({round(x["s"] / accel, 2) for x in segs if x["s"] > 0.5})
+    pedidos = sorted({round((x["s"] - a0) / accel, 2) for x in segs if x["s"] > 0.5})
     return [t for t in pedidos if any(abs(t - v) <= tol for v in vistos)]
 
 
@@ -136,7 +143,7 @@ def _planos(cortes, dur):
     return [b - a for a, b in zip(marcos, marcos[1:]) if b > a]
 
 
-def medir(p, plano=None, accel=1.35):
+def medir(p, plano=None, accel=1.35, a0=0.0):
     """Mede ritmo. O numero que VALE no gate sai da mesma metrica dos dois lados.
 
     A ASSIMETRIA E REAL E FICA (27/08/2026). O estrategista apontou, com razao, que o
@@ -166,7 +173,7 @@ def medir(p, plano=None, accel=1.35):
     """
     p = Path(p)
     dur = _dur(p)
-    cortes = cortes_confirmados(p, plano, accel) if plano else cortes_confirmados(p, None)
+    cortes = cortes_confirmados(p, plano, accel, a0=a0) if plano else cortes_confirmados(p, None)
     # o numero da regua simetrica fica visivel do lado, pra assimetria nao ficar escondida
     so_imagem = cortes_confirmados(p, None) if plano else cortes
     planos = _planos(cortes, dur)
@@ -319,7 +326,10 @@ def main():
             i = args.index("--ritmo-json"); _plano = args[i + 1]; del args[i:i + 2]
         if "--accel" in args:
             i = args.index("--accel"); _accel = float(args[i + 1]); del args[i:i + 2]
-        todos = [medir(a, _plano, _accel or 1.35) for a in args]
+        _a0 = 0.0
+        if "--a0" in args:
+            i = args.index("--a0"); _a0 = float(args[i + 1]); del args[i:i + 2]
+        todos = [medir(a, _plano, _accel or 1.35, _a0) for a in args]
     # NAO usar all(...) com gerador: ele faz short-circuit e para de imprimir no
     # primeiro que reprova, escondendo os demais. Medir varios e mostrar um so e pior
     # que nao medir, porque parece cobertura.

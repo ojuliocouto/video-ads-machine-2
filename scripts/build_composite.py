@@ -346,8 +346,17 @@ def build(ad, look, fmt):
          "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
          "-c:a", "aac", "-ar", "48000", "-b:a", "192k", "-movflags", "+faststart", str(final)])
     _conferir_template(fmt, _tmpl_antes)   # e mudou durante os 25min de render?
-    final = mixar_som(final, ad, workdir)
+    # ORDEM INVERTIDA (27/08/2026). Era `mixar_som` e depois `normalizar_loudness`, e
+    # nessa ordem o loudnorm COME a calibragem do efeito: ele normaliza a faixa inteira
+    # pra -14 LUFS, entao baixar o whoosh derruba o loudness total e o loudnorm sobe tudo
+    # de volta junto. Medido: baixei o whoosh 6 dB no `som_cortes` e o efeito no arquivo
+    # entregue caiu 1,0 dB. A calibragem descrevia um arquivo intermediario que ninguem
+    # ouve.
+    # Normalizando a VOZ primeiro e mixando depois, o efeito entra no nivel em que foi
+    # calibrado e chega assim na entrega. O impacto no loudness final e desprezivel
+    # (os efeitos estao ~20 dB abaixo da voz e sao curtos), e o gate de loudness confere.
     final = normalizar_loudness(final)
+    final = mixar_som(final, ad, workdir)
     wa = V1 / "output" / f"{ad}_{look}_v2composite_{fmt}_whatsapp.mp4"
     scale = "720:1280" if fmt == "9x16" else "720:720"
     run(["ffmpeg", "-y", "-v", "error", "-i", str(final), "-vf", f"scale={scale}",

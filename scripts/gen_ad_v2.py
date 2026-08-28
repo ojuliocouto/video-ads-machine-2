@@ -391,14 +391,27 @@ def main(cfg_path):
                       f"{_borda:.2f}s", flush=True)
                 l["dur"] = _novo
             else:
+                # DOIS BUGS AQUI, ACHADOS PELO DIRETOR DE ARTE (27/08/2026):
+                # 1. `l["dur"] = dur - (novo_t0 - start)` descontava da duracao o tempo
+                #    que o lettering NAO CHEGOU A FICAR NA TELA (o proprio adiamento), e
+                #    nao um tempo de exibicao perdido de verdade. "SABE / por que?" pedia
+                #    1,8s e sobreviveu com 0,47s: um flash na janela que decide o scroll.
+                #    A duracao PEDIDA nao muda so porque o lettering nasceu mais tarde;
+                #    ela so precisa respeitar o piso de 1,20s, igual ao ramo de encurtar.
+                # 2. `l["start"] = _novo_t0` era reatribuido ANTES do calculo dos delays,
+                #    entao `(_novo_t0 - l["start"])` dava sempre ZERO: reajuste no-op, so
+                #    nao afetou nenhum build ainda porque nenhuma pilha real foi adiada.
+                #    Guardar o deslocamento numa variavel propria, antes de reatribuir.
                 _novo_t0 = round(_borda + 0.10, 2)
+                _desloc = round(_novo_t0 - l["start"], 2)
                 print(f"   [layout] lettering '{l['key'][:26]}' adiado de {l['start']:.2f}s "
-                      f"pra {_novo_t0:.2f}s: nao cabe antes da troca", flush=True)
-                l["dur"] = round(l["dur"] - (_novo_t0 - l["start"]), 2)
+                      f"pra {_novo_t0:.2f}s: nao cabe antes da troca (duracao mantida em "
+                      f"{max(l['dur'], 1.20):.2f}s)", flush=True)
+                l["dur"] = max(l["dur"], 1.20)
                 l["start"] = _novo_t0
                 if l.get("linhas"):
-                    l["linhas"] = [{**x, "delay": max(0.0, round(x["delay"]
-                                    - (_novo_t0 - l["start"]), 2))} for x in l["linhas"]]
+                    l["linhas"] = [{**x, "delay": max(0.0, round(x["delay"] - _desloc, 2))}
+                                   for x in l["linhas"]]
             l["split"] = any(x <= l["start"] < y for x, y in janelas_split)
             break
     for l in letts:
@@ -534,8 +547,26 @@ def main(cfg_path):
             for _b in _bordas:
                 _saida = []
                 for _f in _fatias:
-                    if not (_f["start"] + 0.12 < _b < _f["end"] - 0.12):
+                    if not (_f["start"] < _b < _f["end"]):
                         _saida.append(_f); continue
+                    # BORDA PERTO DA PONTA: nao da pra cortar em dois (um lado ficaria
+                    # com menos de 0,12s), mas tambem nao pode deixar atravessar. Apara.
+                    # Sem isto sobrava sempre um grupo com sobreposicao parcial: no jh13,
+                    # 13,52-14,40 com a borda em 14,37, ou seja 0,03s (1 quadro) da
+                    # posicao errada. Invisivel na tela, mas a conferencia por artefato
+                    # exige 0% ou 100% e nada no meio, e "quase sempre" nao e criterio.
+                    if not (_f["start"] + 0.12 < _b < _f["end"] - 0.12):
+                        _antes = _b - _f["start"]
+                        _depois = _f["end"] - _b
+                        if _antes >= _depois and _antes >= 0.30:
+                            _saida.append({**_f, "end": round(_b - 0.02, 3)})
+                            _cortados += 1
+                        elif _depois > _antes and _depois >= 0.30:
+                            _saida.append({**_f, "start": round(_b + 0.02, 3)})
+                            _cortados += 1
+                        else:
+                            _saida.append(_f)
+                        continue
                     _ini = [w for w in _f["words"] if (w["start"] + w["end"]) / 2 < _b]
                     _fim = [w for w in _f["words"] if (w["start"] + w["end"]) / 2 >= _b]
                     if not _ini or not _fim:
@@ -569,6 +600,27 @@ def main(cfg_path):
                     # fronteira sao a mesma coisa; fazer so metade nao resolve nada.
                     _fim_ini = round(min(_ini[-1]["end"], _b - 0.02), 3)
                     _ini_fim = round(max(_fim[0]["start"], _b + 0.02), 3)
+                    # PISO TAMBEM NESTE RAMO (27/08/2026, achado do diretor de arte). O
+                    # piso de 0,30s so valia no ramo de APARAR (grupo de uma palavra); o
+                    # ramo de CORTAR EM DUAS nao tinha piso nenhum, mesmo erro de "um
+                    # ramo so" dentro do proprio conserto de hoje. "todo o processo"
+                    # virava "todo o" por 0,178s, um buraco de 0,13s, e "processo" por
+                    # 0,185s: dois flashes separados por 380px de posicao, com apagao no
+                    # meio, que no celular le como falha de renderizacao.
+                    # Se qualquer fatia ficar curta demais, nao corta: apara o grupo
+                    # INTEIRO pro lado dominante, igual ja se faz com grupo de 1 palavra.
+                    if (_fim_ini - _f["start"] < 0.30) or (_f["end"] - _ini_fim < 0.30):
+                        _antes = _b - _f["start"]
+                        _depois = _f["end"] - _b
+                        if _antes >= _depois and _antes >= 0.30:
+                            _saida.append({**_f, "end": round(_b - 0.02, 3)})
+                            _cortados += 1
+                        elif _depois > _antes and _depois >= 0.30:
+                            _saida.append({**_f, "start": round(_b + 0.02, 3)})
+                            _cortados += 1
+                        else:
+                            _saida.append(_f)
+                        continue
                     _saida.append({**_f, "words": _ini, "start": _f["start"],
                                    "end": _fim_ini})
                     _saida.append({**_f, "words": _fim, "start": _ini_fim,

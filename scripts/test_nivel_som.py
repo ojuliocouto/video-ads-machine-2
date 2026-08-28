@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
-"""Efeito tem que ser AUDIVEL sob a voz. Trava nascida de defeito real (20/08/2026).
+"""Nivel do efeito sonoro: audivel, mas discreto. Duas travas, dois defeitos reais.
 
-O whoosh foi gerado com volume=-14dB e ficou com RMS -40,5 dBFS, 26 dB abaixo da voz do
-Thales: a mixagem rodava, o log dizia "6 efeitos", e nao se ouvia NADA. Medido, o delta
-de energia na janela do efeito era 0,0 dB. "Existia" so no arquivo.
+DEFEITO 1 (20/08/2026): whoosh a volume=-14dB, RMS -40,2 dBFS. A mixagem rodava, o log
+dizia "6 efeitos", e nao se ouvia NADA. "Existia" so no arquivo.
 
-Faixa: -30 a -20 dBFS. Abaixo de -30 some sob a fala (-14 a -22 dBFS nas janelas
-faladas); acima de -20 compete com ela.
+DEFEITO 2 (27/08/2026): whoosh a volume=-1dB, RMS -27,2 dBFS. O Julio: "tem um som
+ridiculo nas transicoes, parece um tiro".
+
+A FAIXA ANTERIOR DESTE TESTE ERA -30 a -20 dBFS, E ELA PERMITIA O DEFEITO 2: os -27,2
+que o Julio reprovou cabiam dentro dela com folga. Teste que passa verde no material
+que o cliente reprova esta calibrado errado, nao "quase certo". A faixa velha tinha sido
+escrita olhando so pro defeito 1, com o outro extremo chutado ("acima de -20 compete com
+a voz") em vez de medido.
+
+Faixa nova: -38 a -31 dBFS, ancorada nos DOIS vereditos humanos, com o alvo em -34.
+
+E o raciocinio do extremo alto mudou junto: nao e "compete com a voz". O whoosh a -24,6
+dBFS ja estava ABAIXO da voz (-17,9) e mesmo assim soava como tiro, porque os efeitos
+caem nos CORTES e corte coincide com PAUSA de fala: eles aparecem sozinhos, no silencio.
+O que importa e o nivel absoluto tocando so, nao a relacao com a fala.
 """
 import subprocess
 import sys
@@ -18,7 +30,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 import som_cortes as S
 
-MIN_DB, MAX_DB = -30.0, -20.0
+MIN_DB, MAX_DB = -38.0, -31.0
 
 
 def rms_db(p):
@@ -39,9 +51,10 @@ class TesteNivelDeSom(unittest.TestCase):
                 db = rms_db(S.SOM / nome)
                 self.assertIsNotNone(db, f"{nome} sem audio")
                 self.assertGreaterEqual(db, MIN_DB,
-                    f"{nome} em {db:.1f} dBFS: some sob a voz (foi o defeito de 20/08)")
+                    f"{nome} em {db:.1f} dBFS: some na entrega (defeito de 20/08, -40,2)")
                 self.assertLessEqual(db, MAX_DB,
-                    f"{nome} em {db:.1f} dBFS: compete com a voz do Thales")
+                    f"{nome} em {db:.1f} dBFS: alto demais tocando numa pausa de fala "
+                    f"(defeito de 27/08, -27,2: 'parece um tiro')")
 
     def test_nao_estoura(self):
         for nome in S.EFEITOS:

@@ -61,6 +61,12 @@ class TesteSomCortes(unittest.TestCase):
                 self.assertLess(pico, -6.0,
                                 f"{nome} estoura ({pico} dB): efeito é sutil, não solo")
 
+    # O CONTRATO DE NIVEL MORA EM test_nivel_som.py, NAO AQUI (27/08/2026).
+    # Cheguei a escrever um segundo teste de nivel neste arquivo, com faixa propria, e
+    # so descobri o `test_nivel_som.py` quando os dois brigaram na suite. Dois testes
+    # medindo a mesma coisa com faixas diferentes e pior que um so: o que passa vira
+    # alibi pro que reprova. Este arquivo cuida de existencia, duracao, sample rate e
+    # clipping; o nivel e la.
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
