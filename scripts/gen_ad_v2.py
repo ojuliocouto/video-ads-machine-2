@@ -939,6 +939,21 @@ def main(cfg_path):
         if n:
             print(f"   [fundo claro] {n} grupo(s) com tinta INVERTIDA pelo ARQUIVO-FONTE "
                   f"(sem footage ainda; o proximo build mede na footage)", flush=True)
+    # NASCER COLADO NO FIM DO SPLIT E NASCER ANTES DO CORTE (31/08/2026, builds 44-45).
+    # O grupo "profissionais." nascia 0,03s depois de a janela de split fechar NO RELOGIO
+    # DO OVERLAY, mas o corte visual da footage vem ate 0,1s depois (14,37 contra 14,45,
+    # mais arredondamento de quadro). Resultado: legenda em posicao de tela cheia sobre o
+    # rosto do painel de baixo, atravessando os OLHOS por 3 quadros (gate: 7,6% e depois
+    # 9,8% do rosto). Grupo que nasce a menos de GUARDA_POS_SPLIT do fim de um split e
+    # empurrado pra depois da guarda; palavra que ficaria antes do novo inicio cai fora.
+    GUARDA_POS_SPLIT = 0.18
+    for g in groups:
+        for _a, _b in janelas_split:
+            if 0 <= g["start"] - _b < GUARDA_POS_SPLIT:
+                g["start"] = round(_b + GUARDA_POS_SPLIT, 3)
+                g["words"] = [w for w in g["words"]
+                              if (w["start"] + w["end"]) / 2 >= g["start"]]
+    groups = [g for g in groups if g["words"] and g["end"] - g["start"] >= 0.20]
     for g in groups:
         if g["end"] > logo_start:
             g["end"] = logo_start
