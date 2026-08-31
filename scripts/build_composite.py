@@ -407,10 +407,31 @@ def build(ad, look, fmt):
     final = normalizar_loudness(final)
     final = mixar_som(final, ad, workdir)
     final = mixar_musica(final)
+    # TIMESTAMP LIMPO NO FIM (31/08/2026, prints do Julio). Os tres remuxes em serie
+    # com copia de video (loudness -> som -> musica) deixaram o PRIMEIRO quadro em
+    # pts -0,067s e o DTS fora de ordem. ffprobe e QuickTime toleram; o player do
+    # WhatsApp nao: mostrava 1:22 num video de 1:30 e o audio escorregava ao longo da
+    # peca ("o audio ta des-sincronizado"). Um remux final zera a linha do tempo, e o
+    # gate abaixo RECUSA entregar arquivo com timestamp negativo.
+    _limpo = final.with_name(final.stem + "_ts.mp4")
+    run(["ffmpeg", "-y", "-v", "error", "-fflags", "+genpts", "-i", str(final),
+         "-c", "copy", "-avoid_negative_ts", "make_zero",
+         "-muxpreload", "0", "-muxdelay", "0",
+         "-movflags", "+faststart", str(_limpo)])
+    _limpo.replace(final)
+    _pts0 = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                            "-show_entries", "packet=pts_time", "-of", "csv=p=0",
+                            "-read_intervals", "%+0.2", str(final)],
+                           capture_output=True, text=True).stdout.strip().splitlines()
+    if _pts0 and min(float(x) for x in _pts0 if x) < -0.001:
+        sys.exit(f"ERRO: timestamp de video negativo depois do remux ({_pts0[:3]}); "
+                 "nao entregar arquivo que desincroniza no player")
+    print(f"   [ts] primeiro pts de video: {_pts0[0] if _pts0 else '?'}", flush=True)
     wa = V1 / "output" / f"{ad}_{look}_v2composite_{fmt}_whatsapp.mp4"
     scale = "720:1280" if fmt == "9x16" else "720:720"
     run(["ffmpeg", "-y", "-v", "error", "-i", str(final), "-vf", f"scale={scale}",
          "-c:v", "libx264", "-crf", "28", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+         "-avoid_negative_ts", "make_zero",
          "-c:a", "aac", "-ar", "48000", "-b:a", "128k", "-movflags", "+faststart", str(wa)])
     print(f"OK -> {final}  ({vdur(final):.2f}s)")
     return str(final)

@@ -985,39 +985,17 @@ def main(cfg_path):
     # nenhum texto na tela, e vaos como esse somavam 12% (o teto do gate) com o
     # estrategista apontando exatamente essa janela como a virada da dor rodando muda.
     # O eco (mesma frase no lettering E na legenda) continua descartado por inteiro.
-    # ECO PARCIAL TAMBEM SAI (31/08/2026, Julio por WhatsApp sobre o "SABE POR QUE?"). A
-    # legenda "I.A... sabe por" terminava 0,5s antes do lettering "sabe / por que?" subir:
-    # nao ha sobreposicao de tempo, ha a MESMA frase duas vezes seguidas, e e isso que le
-    # como "lettering e legenda ao mesmo tempo, fica confuso". O filtro de eco so
-    # descartava legenda INTEIRA igual ao lettering. Agora, se a cauda da legenda repete
-    # palavras do lettering que vem logo depois, essas palavras saem da legenda (a
-    # frase fica so no lettering, que e quem tem peso). Sobrando menos de duas palavras
-    # ou menos de 0,30s, o grupo sai inteiro.
-    def _sem_eco_na_cauda(g):
-        gw = [(w, norm(w["text"])) for w in g["words"]]
-        for ls, le, toks in lett_phrases:
-            if not (g["end"] > ls - LETT_LOOKBACK and g["start"] < le + 0.2):
-                continue
-            k = len(gw)
-            while k > 0 and gw[k-1][1] and gw[k-1][1] in toks:
-                k -= 1
-            if k == len(gw):
-                continue
-            if k < 2:
-                return None
-            novo = dict(g); novo["words"] = [w for w, _ in gw[:k]]
-            novo["end"] = round(min(g["end"], novo["words"][-1]["end"] + 0.35), 3)
-            if novo["end"] - novo["start"] < 0.30:
-                return None
-            return novo
-        return g
-
+    # ECO PARCIAL: REVERTIDO (31/08/2026, terceira rodada dos prints do Julio).
+    # Cortar da legenda as palavras que o lettering repete deixou a frase MUDA na tela
+    # (buraco de 5 a 7s) e a tentativa seguinte, puxar o lettering pro instante da fala,
+    # pousou o lettering NA TESTA do apresentador no painel do split (16,4% do rosto,
+    # t=62s) e subiu o tempo parado de 9% pra 26%. O desenho que fica e o original:
+    # a legenda acompanha a frase enquanto ela e falada (fiel ao audio), o lettering
+    # entra logo DEPOIS como carimbo, e a folga de 0,35s (FOLGA_LETT abaixo) garante
+    # que os dois nunca dividem a tela. Duas licoes pagas em quatro builds.
     _aparados = []
     for g in groups:
         if _echoes_lettering(g):
-            continue
-        g = _sem_eco_na_cauda(g)
-        if g is None:
             continue
         fatias = [dict(g)]
         # LEGENDA E LETTERING NAO DIVIDEM A TELA (31/08/2026, Julio por WhatsApp: no
