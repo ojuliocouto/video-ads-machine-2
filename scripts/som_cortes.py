@@ -80,6 +80,7 @@ EFEITOS = {
 # um trecho de alternancia rapida disparava efeito em quase todo corte, que e exatamente
 # o que o banco proibe.
 INTERVALO_MIN = 4.0      # segundos entre dois efeitos, no tempo do arquivo entregue
+WHOOSH_LIGADO = False    # ver plano_de_som; religar so com ordem explicita do Julio
 RISER_ANTES = 1.0        # o riser sobe ANTES da virada, senao chega atrasado
 
 
@@ -99,6 +100,12 @@ def plano_de_som(segs, accel=1.35, cta=None):
             continue
         # so ENTRADA: o segmento anterior tem que ser outra coisa, ou ser o primeiro
         if i > 0 and segs[i - 1]["tipo"] == "insert":
+            continue
+        # WHOOSH DESLIGADO (31/08/2026). Depois de duas calibragens por medicao o Julio
+        # ainda escreveu "tem um som nas transicoes que ta me irritando". Efeito de
+        # transicao nao e informacao, e cada tentativa de deixa-lo discreto custou um
+        # build. Sai. O riser do CTA fica: nao e transicao, e o unico som com funcao.
+        if not WHOOSH_LIGADO:
             continue
         cand.append({"t": round(x["s"] / accel, 3), "efeito": "whoosh.wav", "peso": 1})
     if cta is not None:

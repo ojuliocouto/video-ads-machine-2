@@ -33,6 +33,7 @@ sombra grande, fundo escuro.
     raio                24px
 """
 import os
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 LARGURA_JANELA = 1008
@@ -81,6 +82,17 @@ def png_navegador(aspecto, destino, rotulo=None):
     ImageDraw.Draw(som).rounded_rectangle([x0, y0 + 6, x1, y1 + 6],
                                           radius=RAIO, fill=(0, 0, 0, 64))
     som = som.filter(ImageFilter.GaussianBlur(14))
+    # A SOMBRA NAO PODE FICAR EMBAIXO DO VIDEO (28/08/2026). Ela e composta no canvas
+    # ANTES do card, e o "buraco" que o card abre na janela (alpha 0) NAO apaga o que ja
+    # esta embaixo: `alpha_composite` compoe, nao substitui. Resultado: preto com alpha
+    # 64 por cima da area do video, ou seja 255*(1-64/255) = 191. Era o "filtro cinza"
+    # que o Julio viu duas vezes e que eu procurei no lugar errado nas duas (mexi em
+    # exposicao, contraste e teto; a causa estava no PNG da moldura).
+    # Aqui a area da janela e zerada na propria sombra: ela so existe FORA do card.
+    _jan = Image.new("L", (W, H), 255)
+    ImageDraw.Draw(_jan).rounded_rectangle([x0, y0, x1, y1], radius=RAIO, fill=0)
+    som.putalpha(Image.fromarray(
+        (np.array(som.split()[3]).astype(np.uint16) * np.array(_jan) // 255).astype(np.uint8)))
 
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     img.alpha_composite(som)

@@ -68,13 +68,11 @@
         border-radius:24px; object-fit:contain; background:#0b0d14;
         border:1.5px solid rgba(255,255,255,.16);
         box-shadow:0 30px 90px rgba(0,0,0,.6); }
-      .broll-tag { position:absolute; left:36px; top:120px; z-index:15;
-        display:flex; align-items:center; gap:14px; padding:12px 26px; border-radius:100px;
-        background:rgba(12,13,20,.62); border:1px solid rgba(255,255,255,.18); backdrop-filter:blur(6px); }
-      .broll-tag .rec { width:11px; height:11px; border-radius:50%; background:rgba(255,180,120,.9);
-        box-shadow:0 0 12px rgba(255,180,120,.55); }
-      .broll-tag .t { font-family:"Inter"; font-weight:500; font-size:26px; letter-spacing:.5px;
-        color:rgba(255,255,255,.9); text-transform:none; }
+      /* PILULA DE LABEL: REMOVIDA (28/08/2026). Mesma decisao do 9x16, e ela precisa
+         estar NOS DOIS templates: o quadrado e gerado pelo mesmo gen_ad_v2, entao
+         deixar so um deles limpo faria o 1x1 sair com o elemento que o 9x16 nao tem.
+         Motivo completo no comentario do reel-editorial/index.html. */
+      .broll-tag { display:none; }
 
       /* ---------- LOWER THIRD (TOP) ---------- */
       #lt { position:absolute; left:60px; top:70px; z-index:40;
@@ -104,7 +102,7 @@
       /* ---------- CAPTIONS (legenda editorial) ---------- */
       #caps { position:absolute; inset:0; z-index:35; pointer-events:none; }
       #caps .cgrp { position:absolute; left:0; right:0; bottom:230px; padding:26px 110px;
-        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 36px;  /* pico 1,14 come o vao: gap acompanha (28/08) */
+        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 30px;  /* pico 1,14 come o vao: gap acompanha (28/08) */
         /* SEM SCRIM (27/08/2026), alinhando com o 9x16. O scrim entrou aqui em 12/08
            e em 19/08 o 9x16 tirou o dele por ordem da Jheni ("essa sombra embaixo me
            da panico, deixa esteticamente pobre"). O 1x1 nao acompanhou e ficou oito
@@ -122,9 +120,52 @@
         paint-order:stroke fill; -webkit-text-stroke:0.065em rgba(6,7,12,.92);
         text-shadow:0 2px 5px rgba(0,0,0,.55), 0 8px 26px rgba(0,0,0,.42); }
       #caps .cw.kw { color:#E87D4E; }
+      /* PREENCHIMENTO LINEAR, NAO SALTO (29/08/2026, Julio por audio: "nao gosto
+         desse estilo onde a legenda sobe, fica pulando... gosto quando e uma cor, vai
+         preenchendo ela, de forma linear").
+         Cada palavra tem duas camadas do MESMO texto, na mesma caixa: `base` apagada e
+         `fill` acesa por cima. O GSAP corta a de cima com `clip-path` da esquerda pra
+         direita, entao a cor entra varrendo a palavra.
+         Historico do que ja foi reprovado aqui, pra nao voltar: escala por palavra
+         (colidia com a vizinha, "paginacompletamente" com 7px de vao), micro-pulo de
+         1,03 ("pulando mas muito pequeno") e salto vertical de 12 a 16px (este pedido).
+         A caixa NAO muda de tamanho em nenhum momento: as duas camadas ocupam o mesmo
+         espaco e so a mascara se move, entao nada reflui e nenhuma palavra empurra a
+         outra. */
+      #caps .cw { position:relative; display:inline-block; }
+      #caps .cw .base, #caps .cw .fill { display:block; }
+      #caps .cw .fill { position:absolute; left:0; top:0; white-space:pre;
+        clip-path:inset(0 100% 0 0); }
+      /* OPACIDADE DA CAMADA APAGADA: 52% -> 70% (29/08/2026, medido no build 32).
+         Com 52% o gate de contraste achou 30 faixas abaixo do piso, contra 9 no build
+         anterior: a palavra AINDA NAO FALADA caia para 3,2:1 sobre fundo escuro. O
+         espectador le a linha inteira, nao so a palavra do momento, entao palavra por
+         vir ilegivel e defeito, nao hierarquia.
+         70% e o meio entre os 52% que reprovaram e os 82% do desenho antigo, que nunca
+         teve reclamacao de leitura. A varredura de 70% para 100% continua visivel: foi
+         conferida no quadro, letra por letra, em "paginas". */
+      #caps .cw .base { color:rgba(245,239,230,.70); }
+      #caps .cw .fill { color:#F5EFE6; }
+      #caps .cw.kw .base { color:rgba(232,125,78,.62); }
+      #caps .cw.kw .fill { color:#E87D4E; }
+      /* sobre insert claro a tinta inverte, e as duas camadas invertem junto */
+      #caps .cgrp-claro .cw .base { color:rgba(18,20,26,.62); }
+      #caps .cgrp-claro .cw .fill { color:#12141A; }
+      #caps .cgrp-claro .cw.kw .base { color:rgba(178,67,26,.62); }
+      #caps .cgrp-claro .cw.kw .fill { color:#B2431A; }
+
       /* tres estados por palavra, igual ao 9x16. O piso de 0,82 nao desce: o gate-ad
          conta texto por alpha>190 e abaixo de 0,80 ele para de enxergar a legenda. */
-      #caps .cw { opacity:.82; transform-origin:50% 82%; will-change:opacity, transform; }
+      /* OPACIDADE CHEIA NA PALAVRA (29/08/2026). Este `.cw` tinha `opacity:.82`, que
+         era o estado "por dizer" do desenho ANTIGO: o GSAP subia pra 1 na palavra ativa
+         e devolvia pra 0,90 depois. Com o preenchimento linear a animacao de opacidade
+         saiu, e o 0,82 do CSS ficou valendo o tempo inteiro: medi o alpha do MOV e o
+         MAXIMO era 210 de 255, ou seja a legenda inteira renderizava a 82%.
+         Efeito colateral que denunciou: o gate de contraste, que mede tinta com alpha
+         cheio, passou a nao achar UMA faixa de legenda no anuncio todo e devolveu
+         "0 faixas" com PASSA. Gate que fica cego e pior que gate que reprova.
+         O apagado agora mora na COR da camada `.base`, nao na opacidade da palavra. */
+      #caps .cw { opacity:1; transform-origin:50% 82%; will-change:transform; }
       #caps .cw.on  { opacity:1; }
       #caps .cw.off { opacity:.90; }
       /* ---------- LOGO DO EVENTO ---------- */
@@ -293,12 +334,22 @@
           var wEnd = parseFloat(span.dataset.wEnd);
           // dwell minimo: abaixo de 0,34s o realce vira estrobo em palavra funcional
           if (!(wEnd > wStart + 0.34)) { wEnd = wStart + 0.34; }
-          var pico = span.classList.contains("kw") ? 1.18 : 1.14;  // igual ao 9x16, 28/08
-          gsap.set(span, { opacity: 0.82, scale: 1, y: 8 });
-          tl.to(span, { opacity: 1, y: 0, scale: pico, duration: 0.14,
-                        ease: "power2.out", overwrite: "auto" }, wStart);
-          tl.to(span, { opacity: 0.90, scale: 1, duration: 0.22,
-                        ease: "power1.inOut", overwrite: "auto" }, wEnd);
+          // PREENCHIMENTO LINEAR (29/08/2026). O salto vertical saiu por ordem do
+          // Julio. A camada `fill` e revelada da esquerda pra direita durante a fala da
+          // palavra, com `ease: "none"` porque ele pediu LINEAR: qualquer easing faz a
+          // cor acelerar e desacelerar, que e exatamente o "zoado" que ele descreveu.
+          // A varredura dura o tempo REAL da palavra (nao um valor fixo), entao ela
+          // acompanha a fala em vez de correr na frente.
+          // Nada de `y`, `scale` nem `filter`: a palavra nao se move, nao cresce e nao
+          // empurra a vizinha. Foi movimento de palavra que gerou as tres reprovacoes
+          // anteriores.
+          var _fill = span.querySelector(".fill");
+          if (_fill) {
+            gsap.set(_fill, { clipPath: "inset(0 100% 0 0)" });
+            tl.to(_fill, { clipPath: "inset(0 0% 0 0)",
+                           duration: Math.max(wEnd - wStart, 0.12),
+                           ease: "none", overwrite: "auto" }, wStart);
+          }
         });
         // fade-out termina EXATAMENTE em gEnd (antes era gEnd-0.06 + 0.16s = gEnd+0.10,
         // vazava por cima do fade-in do proximo grupo e empilhava duas legendas)

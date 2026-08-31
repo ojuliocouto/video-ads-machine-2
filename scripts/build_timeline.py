@@ -388,16 +388,35 @@ def _render_captions_html(groups: list[dict]) -> str:
             # (teto de 12% do video sem texto). Descer resolve os dois lados.
             # "costura" (split) tem prioridade sobre "baixa": no split a posicao baixa
             # cai na boca do apresentador, que e o defeito que ela deveria evitar.
+            # "claro" vem do gen_ad_v2 quando o fundo daquele trecho e CLARO (insert de
+            # tela cheia com mockup de pagina branca). A legenda e branca, e sobre fundo
+            # claro ela some: contraste medido no quadro entregue do build 26, 1,52:1,
+            # contra 11,7 e 14,3 nos trechos escuros do mesmo anuncio. Mudar de posicao
+            # nao resolve nesse caso: o perfil do quadro inteiro nao tem UMA faixa acima
+            # de 3,6:1 fora da zona morta da UI. La a legenda INVERTE a tinta (escura em
+            # vez de branca), que resolve sem tarja (vetada pela Jheni em 19/08) e sem
+            # engrossar contorno (deixa a letra oca sobre branco, achado do diretor).
             f'  <div class="cgrp'
-            f'{" cgrp-costura" if group.get("costura") else (" cgrp-baixa" if group.get("baixa") else "")}{" cgrp-sem-lead" if group.get("sem_lead") else ""}" '
+            f'{" cgrp-costura" if group.get("costura") else (" cgrp-baixa" if group.get("baixa") else "")}{" cgrp-sem-lead" if group.get("sem_lead") else ""}{" cgrp-claro" if group.get("claro") else ""}" '
             f'data-g-start="{group["start"]:.3f}" '
             f'data-g-end="{group["end"]:.3f}">'
         )
         for word in group["words"]:
             css_class = "cw kw" if word.get("kw") else "cw"
+            # DUAS CAMADAS POR PALAVRA (29/08/2026, pedido do Julio por audio: "nao
+            # gosto desse estilo de legenda onde ela sobe, fica pulando; gosto quando e
+            # uma cor, vai preenchendo ela, de forma linear").
+            # `base` e a palavra apagada, `fill` e a mesma palavra acesa por cima, e o
+            # GSAP revela a de cima da esquerda pra direita enquanto ela e falada.
+            # Por que duas camadas e nao `background-clip: text`: aquele caminho exige
+            # `color: transparent`, e se o recurso falhar no renderizador a palavra SOME.
+            # Aqui o pior caso e a camada de cima aparecer de uma vez, ou seja legenda
+            # sem animacao, que e chato mas legivel. Legenda invisivel e defeito grave.
             lines.append(
                 f'    <span class="{css_class}" data-w-start="{word["start"]:.3f}" '
-                f'data-w-end="{word["end"]:.3f}">{word["text"]}</span>'
+                f'data-w-end="{word["end"]:.3f}">'
+                f'<span class="base">{word["text"]}</span>'
+                f'<span class="fill">{word["text"]}</span></span>'
             )
         lines.append("  </div>")
     lines.append("</div>")

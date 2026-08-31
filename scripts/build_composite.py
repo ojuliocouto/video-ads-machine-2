@@ -62,6 +62,7 @@ CROP_H_1X1 = 1500
 # de fidelidade. A geracao de config la esta protegida por __main__, entao importar e
 # so leitura de dado.
 from ads_v2_configs import LOOKS as LK
+import cache_overlay
 SUFFIX = {"9x16": "", "1x1": "_1x1"}
 
 
@@ -134,6 +135,34 @@ def strip_overlay(idx_html: Path) -> Path:
     dst.write_text(html)
     return dst
 
+
+
+# MUSICA DE FUNDO (31/08/2026, pedido do Julio: "falta uma musiquinha de fundo").
+# Faixa em V1/assets/som/musica_fundo.* (ou VAM_MUSICA). Entra DEPOIS do loudnorm da voz
+# e da mixagem de efeitos, no nivel MUSICA_LUFS, com fade de entrada e de saida; se a
+# faixa for mais curta que o video, repete. Sem faixa, segue sem musica e avisa.
+MUSICA_LUFS = -31.0      # ~17 LU abaixo da voz (-14): presente, nunca disputando a fala
+def mixar_musica(video):
+    import glob as _g
+    faixa = os.environ.get("VAM_MUSICA") or next(iter(sorted(
+        _g.glob(str(V1 / "assets" / "som" / "musica_fundo.*")))), None)
+    if not faixa or not Path(faixa).exists():
+        print("   [musica] nenhuma faixa em assets/som/musica_fundo.*; seguindo sem musica",
+              flush=True)
+        return video
+    dur = vdur(video)
+    saida = video.with_name(video.stem + "_mus.mp4")
+    fc = (f"[1:a]aloop=loop=-1:size=2e9,atrim=0:{dur:.3f},"
+          f"loudnorm=I={MUSICA_LUFS}:TP=-6:LRA=7,"
+          f"afade=t=in:st=0:d=1.2,afade=t=out:st={max(dur-2.5,0):.3f}:d=2.5[m];"
+          f"[0:a][m]amix=inputs=2:duration=first:normalize=0[a]")
+    run(["ffmpeg", "-y", "-v", "error", "-i", str(video), "-stream_loop", "-1", "-i", faixa,
+         "-filter_complex", fc, "-map", "0:v", "-map", "[a]", "-shortest",
+         "-c:v", "copy", "-c:a", "aac", "-ar", "48000", "-b:a", "192k",
+         "-movflags", "+faststart", str(saida)])
+    saida.replace(video)
+    print(f"   [musica] {Path(faixa).name} a {MUSICA_LUFS} LUFS", flush=True)
+    return video
 
 def mixar_som(video, ad, workdir):
     """Whoosh na entrada de insert e riser antes do CTA, no arquivo ja acelerado.
@@ -260,30 +289,49 @@ def build(ad, look, fmt):
 
     # 3) render MOV alpha (dir dedicado com assets)
     only = V2L / f"render-{ad}-{lk}{sfx}-ovlonly"
-    if only.exists():
-        run(["rm", "-rf", str(only)])
-    only.mkdir(parents=True)
-    (only / "index.html").write_text(ovl_html.read_text())
-    os.symlink(workdir / "fonts", only / "fonts")
-    run(["cp", str(workdir / "logo.png"), str(only / "logo.png")])
-    if (workdir / "meta.json").exists():
-        run(["cp", str(workdir / "meta.json"), str(only / "meta.json")])
-    print("[3/6] render overlay MOV (alpha)...")
-    # --workers 1: o modo multi-worker (default "auto", 4 workers) tem race condition na
-    # captura paralela de frame que MISTURA pixels de dois instantes diferentes do timeline
-    # num mesmo frame de saida (ghosting/dupla-exposicao de texto, achado real no ad09,
-    # 20/07/2026). --workers 1 elimina a corrida E nao fica mais lento (dedup de frame
-    # estatico so verifica com seguranca em modo single-worker; com 4 workers o dedup
-    # aborta por "verification budget exhausted" e cai no fallback de capturar tudo).
-    # --experimental-fast-capture=false: o modo rapido (ligado por padrao no macOS) le
-    # DOM paint records em vez de capturar a tela. Os grupos de legenda comecam com
-    # visibility:hidden e sao revelados pelo GSAP, e o fast-capture NAO registra essa
-    # mudanca: o overlay saia VAZIO por trechos longos (13s no ad03v2, 25% do anuncio)
-    # mesmo com os grupos corretos no HTML. Foi o defeito que mais derrubou nota na leva.
-    run([HF, "render", ".", "--format", "mov", "-f", "30", "--workers", "1",
-         "--experimental-fast-capture=false"], cwd=str(only))
-    movs = sorted((only / "renders").glob("*.mov"), key=lambda p: p.stat().st_mtime)
-    mov = movs[-1]
+    sig_arquivo = only / ".assinatura_overlay"
+
+    # CACHE DO OVERLAY (31/08/2026): o passo 3 (~3min de Chromium) so depende do HTML
+    # gerado no passo 2 (index_overlay.html), que ja incorpora roteiro, transcricao,
+    # config, template e ritmo. Quando so a footage muda entre builds (troca de crop,
+    # broll, look de video), o overlay sai IDENTICO e renderiza-lo nao muda nada no
+    # resultado: era 8 renders de 3min jogados fora num dia so. A assinatura e o
+    # sha256 do proprio HTML final: se ele nao mudou byte a byte, o MOV tambem nao
+    # muda. Desligar com CACHE_OVERLAY=0.
+    mov = None
+    if os.environ.get("CACHE_OVERLAY") != "0" and only.exists() and (only / "renders").exists():
+        candidatos = sorted((only / "renders").glob("*.mov"), key=lambda p: p.stat().st_mtime)
+        mov_existente = candidatos[-1] if candidatos else None
+        if mov_existente and cache_overlay.reaproveitavel(ovl_html, mov_existente, sig_arquivo):
+            mov = mov_existente
+            print(f"   [cache] overlay reaproveitado (assinatura {cache_overlay.assinatura([ovl_html])})")
+
+    if mov is None:
+        if only.exists():
+            run(["rm", "-rf", str(only)])
+        only.mkdir(parents=True)
+        (only / "index.html").write_text(ovl_html.read_text())
+        os.symlink(workdir / "fonts", only / "fonts")
+        run(["cp", str(workdir / "logo.png"), str(only / "logo.png")])
+        if (workdir / "meta.json").exists():
+            run(["cp", str(workdir / "meta.json"), str(only / "meta.json")])
+        print("[3/6] render overlay MOV (alpha)...")
+        # --workers 1: o modo multi-worker (default "auto", 4 workers) tem race condition na
+        # captura paralela de frame que MISTURA pixels de dois instantes diferentes do timeline
+        # num mesmo frame de saida (ghosting/dupla-exposicao de texto, achado real no ad09,
+        # 20/07/2026). --workers 1 elimina a corrida E nao fica mais lento (dedup de frame
+        # estatico so verifica com seguranca em modo single-worker; com 4 workers o dedup
+        # aborta por "verification budget exhausted" e cai no fallback de capturar tudo).
+        # --experimental-fast-capture=false: o modo rapido (ligado por padrao no macOS) le
+        # DOM paint records em vez de capturar a tela. Os grupos de legenda comecam com
+        # visibility:hidden e sao revelados pelo GSAP, e o fast-capture NAO registra essa
+        # mudanca: o overlay saia VAZIO por trechos longos (13s no ad03v2, 25% do anuncio)
+        # mesmo com os grupos corretos no HTML. Foi o defeito que mais derrubou nota na leva.
+        run([HF, "render", ".", "--format", "mov", "-f", "30", "--workers", "1",
+             "--experimental-fast-capture=false"], cwd=str(only))
+        movs = sorted((only / "renders").glob("*.mov"), key=lambda p: p.stat().st_mtime)
+        mov = movs[-1]
+        sig_arquivo.write_text(cache_overlay.assinatura([ovl_html]))
     print("   overlay:", mov.name)
 
     # 4) footage v1 (SEM texto): produzir_roteiro CAP=0 BAKE=0. Canvas nativo do v1 e
@@ -358,6 +406,7 @@ def build(ad, look, fmt):
     # (os efeitos estao ~20 dB abaixo da voz e sao curtos), e o gate de loudness confere.
     final = normalizar_loudness(final)
     final = mixar_som(final, ad, workdir)
+    final = mixar_musica(final)
     wa = V1 / "output" / f"{ad}_{look}_v2composite_{fmt}_whatsapp.mp4"
     scale = "720:1280" if fmt == "9x16" else "720:720"
     run(["ffmpeg", "-y", "-v", "error", "-i", str(final), "-vf", f"scale={scale}",

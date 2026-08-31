@@ -24,7 +24,21 @@ def _plano(pares):
 
 class TesteMixDeSom(unittest.TestCase):
 
+    # WHOOSH DESLIGADO POR PADRAO (31/08/2026, Julio: "tem um som nas transicoes que ta
+    # me irritando"). Os testes de POSICAO do whoosh continuam valendo pro mecanismo,
+    # entao ligam a chave so dentro deles; o padrao de fabrica e testado a parte.
+    def _com_whoosh(self):
+        S.WHOOSH_LIGADO = True
+        self.addCleanup(setattr, S, "WHOOSH_LIGADO", False)
+
+    def test_whoosh_desligado_por_padrao(self):
+        self.assertFalse(S.WHOOSH_LIGADO)
+        segs = _plano([(0.0, "orig"), (5.0, "insert"), (9.0, "orig")])
+        self.assertEqual([e for e in S.plano_de_som(segs, accel=1.0)
+                          if e["efeito"] == "whoosh.wav"], [])
+
     def test_whoosh_so_na_entrada_de_insert(self):
+        self._com_whoosh()
         segs = _plano([(0.0, "orig"), (5.0, "insert"), (9.0, "orig"), (14.0, "insert")])
         ev = S.plano_de_som(segs, accel=1.0)
         tipos_em = {round(e["t"], 2): e["efeito"] for e in ev}
@@ -48,6 +62,7 @@ class TesteMixDeSom(unittest.TestCase):
                                     f"dois efeitos a {b-a:.2f}s um do outro")
 
     def test_tempo_sai_em_escala_do_arquivo_entregue(self):
+        self._com_whoosh()
         segs = _plano([(0.0, "orig"), (13.5, "insert")])
         ev = S.plano_de_som(segs, accel=1.35)
         self.assertAlmostEqual(ev[0]["t"], 10.0, places=2,

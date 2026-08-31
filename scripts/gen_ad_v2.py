@@ -20,6 +20,7 @@ from pathlib import Path
 
 from caminhos import V1  # noqa: E402
 from caminhos import V2  # noqa: E402
+import cache_transcricao  # noqa: E402
 def _sem_emoji(t):
     """Remove pictogramas do texto de tela (19/08/2026, Jheni: "esses emojis deixam
     ainda mais com cara de pobre"). A COPY do doc nao muda: o strip e so na
@@ -51,6 +52,120 @@ def run(cmd, **kw):
     if r.returncode != 0:
         sys.exit(f"ERRO: {' '.join(str(c) for c in cmd)}\n{r.stderr[-800:]}")
     return r
+
+
+# LIMIAR DE FUNDO CLARO, RESOLVIDO NA CONTA, NAO CHUTADO (28/08/2026).
+# A legenda e branca. O contraste WCAG de tinta branca contra um fundo de luminancia L
+# cruza 4,5:1 (o piso de legibilidade) exatamente em L = 119/255. Acima disso ela precisa
+# de placa; abaixo le sozinha, e placa so sujaria o visual dos trechos escuros.
+# Primeiro escrevi 150 aqui de cabeca e o teste derrubou: em 150 o contraste ja e 2,96:1,
+# ou seja o limiar "seguro" deixava passar fundo que APAGA a legenda.
+# Numeros do quadro entregue do build 26, no MESMO anuncio: 1,52:1 sobre o mockup branco,
+# 11,68:1 sobre o fundo escuro, 14,28:1 sobre a camiseta preta.
+LIMIAR_FUNDO_CLARO = 119
+
+_CACHE_FUNDO = {}
+
+# FAIXA QUE CADA CLASSE DE LEGENDA OCUPA, em y do quadro 1080x1920. Sai do CSS
+# (`#caps .cgrp` bottom 475, `.cgrp-baixa` 330, `.cgrp-costura` 790) com folga pros dois
+# lados, e bate com as faixas que o gate de contraste mede no arquivo entregue.
+FAIXA_LEGENDA = {"costura": (1000, 1130), "baixa": (1370, 1520), "padrao": (1290, 1500)}
+
+
+def _mediana_banda(video, t, y0, y1):
+    """Mediana de luminancia de uma faixa horizontal do video, em 0-255.
+
+    Reduz a faixa antes de medir: o que importa e o tom que a MAIORIA da area tem, que
+    e contra o que a letra compete, nao o pixel individual.
+    """
+    try:
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            q = str(Path(td) / "b.pgm")
+            r = subprocess.run(
+                ["ffmpeg", "-v", "error", "-y", "-ss", f"{max(t, 0):.3f}", "-i", str(video),
+                 "-frames:v", "1",
+                 "-vf", f"crop=1080:{max(y1 - y0, 2)}:0:{y0},format=gray,scale=128:32", q],
+                capture_output=True, text=True)
+            if r.returncode != 0 or not Path(q).exists():
+                return None
+            dados = Path(q).read_bytes()
+            corte, campos = 0, 0
+            while campos < 4 and corte < len(dados):
+                if dados[corte:corte + 1].isspace():
+                    campos += 1
+                corte += 1
+            px = sorted(dados[corte:])
+            return px[len(px) // 2] if px else None
+    except Exception:
+        return None
+
+
+def fundo_claro_footage(video, ini, fim, classe):
+    """True quando a footage ja renderizada e clara na faixa daquela legenda.
+
+    Mede na FOOTAGE, nao no asset. Medir a mediana do arquivo-fonte inteiro foi a
+    segunda tentativa e errou nas duas direcoes (build 28: tinta branca sobre fundo
+    0,524 em t=15,5s e tinta preta sobre fundo 0,013 em t=25,5s), porque o painel mostra
+    um RECORTE do asset, com escala e moldura por cima. Uma pagina branca com uma area
+    escura no recorte le como clara pelo arquivo e como escura na tela.
+    A footage e deterministica, entao a do build anterior vale, do mesmo jeito que o
+    plano de ritmo dela ja e reaproveitado pra fixar o relogio.
+
+    Tres amostras dentro do grupo: perto de um corte, uma amostra sozinha pode cair no
+    plano vizinho, e a mediana das tres nao se deixa levar por isso.
+    """
+    y0, y1 = FAIXA_LEGENDA.get(classe, FAIXA_LEGENDA["padrao"])
+    vals = []
+    for f in (0.25, 0.5, 0.75):
+        v = _mediana_banda(video, ini + (fim - ini) * f, y0, y1)
+        if v is not None:
+            vals.append(v)
+    if not vals:
+        return None
+    vals.sort()
+    return vals[len(vals) // 2] >= LIMIAR_FUNDO_CLARO
+
+
+def fundo_claro(src, start=0.0):
+    """True quando o insert e claro o bastante pra apagar a legenda branca.
+
+    Mede a MEDIANA da luminancia de um quadro da fonte, nao a media: asset bimodal
+    (fundo escuro com uma area de pagina clara) engana a media. Mesma licao que ja tinha
+    sido paga no `_luminancia_mediana_fonte` da footage, com um asset de media 64 e
+    mediana 33.
+
+    Falha de medicao devolve False de proposito: sem numero, nao inventa placa.
+    """
+    chave = (src, round(float(start or 0), 2))
+    if chave in _CACHE_FUNDO:
+        return _CACHE_FUNDO[chave]
+    val = False
+    try:
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            q = str(Path(td) / "l.pgm")
+            r = subprocess.run(
+                ["ffmpeg", "-v", "error", "-y", "-ss", str(float(start or 0) + 0.5),
+                 "-i", str(src), "-frames:v", "1",
+                 "-vf", "format=gray,scale=64:64", q],
+                capture_output=True, text=True)
+            if r.returncode == 0 and Path(q).exists():
+                dados = Path(q).read_bytes()
+                # PGM binario: 3 campos de cabecalho antes dos pixels
+                corte, campos = 0, 0
+                while campos < 4 and corte < len(dados):
+                    if dados[corte:corte + 1].isspace():
+                        campos += 1
+                    corte += 1
+                px = sorted(dados[corte:])
+                if px:
+                    med = px[len(px) // 2]
+                    val = med >= LIMIAR_FUNDO_CLARO
+    except Exception:
+        val = False
+    _CACHE_FUNDO[chave] = val
+    return val
 
 
 def vdur(f):
@@ -103,8 +218,20 @@ def main(cfg_path):
     shutil.copy(V2 / "_local" / "render-reel-editorial" / "meta.json", out / "meta.json")
 
     # ---------- transcript ----------
+    # Cache entre builds (31/08/2026): 8 builds do mesmo ad no mesmo dia rodaram o
+    # parakeet 8 vezes pro MESMO avatar.mp4, ~2,5 min cada, porque cada build cai num
+    # out_dir novo e a checagem acima (transcript.json local) nunca acerta entre eles.
+    # A chave e do CONTEUDO do avatar.mp4, entao qualquer out_dir com o mesmo audio
+    # reaproveita sem chamar o parakeet de novo.
+    _pasta_cache_transcricao = V1 / "output" / "_cache" / "transcricao"
     if not (out / "transcript.json").exists():
-        run([HF, "transcribe", "avatar.mp4", "--engine", "parakeet", "--json", "-d", "."], cwd=out)
+        _cache_hit = cache_transcricao.obter(dst, _pasta_cache_transcricao)
+        if _cache_hit is not None:
+            shutil.copy(_cache_hit, out / "transcript.json")
+            print(f"   [cache] transcricao reaproveitada ({cache_transcricao.chave(dst)})")
+        else:
+            run([HF, "transcribe", "avatar.mp4", "--engine", "parakeet", "--json", "-d", "."], cwd=out)
+            cache_transcricao.guardar(dst, out / "transcript.json", _pasta_cache_transcricao)
     transcript = json.loads((out / "transcript.json").read_text())
 
     # ---------- roteiro v1: blocos + narracao ----------
@@ -200,6 +327,8 @@ def main(cfg_path):
     _trechos_avatar = [(x["s"], x["e"]) for x in _plano_ritmo if x["tipo"] != "insert"]
 
     janelas_split, janelas_texto = [], []
+    # janela de insert -> fonte, pra medir o fundo NO INSTANTE de cada legenda
+    mapa_insert = []
     # instante em que a imagem VOLTA pro avatar por causa de um cap de insert;
     # e onde o CTA sobe no fim do anuncio (ver bloco do cta_start).
     _retorno_avatar = []
@@ -267,6 +396,27 @@ def main(cfg_path):
                 janelas_texto.append((round(_a, 2), round(min(_b2, e), 2)))
         if icfg.get("texto_proprio"):
             janelas_texto.append((round(s2, 2), round(s2 + dur, 2)))
+        # FUNDO CLARO PEDE TINTA ESCURA (28/08/2026). A legenda e branca; sobre insert
+        # claro ela some (1,52:1 medido no build 26) e NAO adianta mudar de posicao: o
+        # perfil do quadro inteiro daquele trecho nao tem faixa acima de 3,6:1 fora da
+        # zona morta da UI.
+        # VALE NO SPLIT TAMBEM, e eu tinha errado isso na primeira versao: escrevi
+        # `not icfg.get("split")` achando que no split a legenda pousava sobre o
+        # apresentador. Pousa sobre o INSERT: a costura fica em y~1030-1105 e o painel
+        # de cima vai ate 1150, entao a legenda do split esta inteira dentro do insert.
+        # Quem mostrou foi o gate de contraste no arquivo entregue: 57 de 120 faixas
+        # abaixo do piso, quase todas na faixa da costura entre 10s e 24s.
+        # POR INSTANTE, NAO POR ARQUIVO (28/08/2026, segunda passada). Classifiquei o
+        # insert inteiro por UM quadro dele e o gate mostrou o preco: apareceu legenda
+        # ESCURA sobre fundo ESCURO (t=25,0s com tinta 0,005 e fundo 0,000). Asset de
+        # video muda: gravacao de tela que abre numa pagina branca rola pra uma area
+        # escura no meio do mesmo insert. Entao guardo o mapa (janela -> fonte, start,
+        # speed) e a decisao sai depois, no instante de cada grupo de legenda.
+        mapa_insert.extend(
+            {"a": round(_a, 2), "b": round(min(_b2, e), 2), "file": icfg["file"],
+             "start": float(icfg.get("start", 0) or 0), "speed": float(icfg.get("speed", 1.0)),
+             "s2": float(s2)}
+            for _a, _b2 in _meus)
         label = cfg.get("labels", {}).get(key, key)
         brolls.append({"src_file": icfg["file"], "start": round(icfg.get("start", 0), 2),
                        "s": round(s2, 2), "d": round(dur, 2), "label": label})
@@ -438,10 +588,31 @@ def main(cfg_path):
             _fsegs = json.loads(_fj.read_text()).get("segs", [])
             _jf = [(round(x["s"], 2), round(x["e"], 2))
                    for x in _fsegs if x.get("layout") == "split"]
-            if _jf:
+            # RELOGIO DA FOOTAGE, LAYOUT DO OVERLAY (28/08/2026). Pegar as janelas da
+            # footage INTEIRAS trouxe junto o julgamento dela de layout, e o plano de
+            # ritmo marca `split` em TODA fatia de insert, inclusive nas que a footage
+            # renderiza em tela cheia: `cheio` (mockup) e `pip` (insert cheio com o
+            # apresentador num circulo). A correcao que existia so conhecia `cheio`.
+            # Defeito real medido no build 26: o insert `pip` de 24,48 a 30,40 entrou
+            # como split, a legenda foi pra faixa da COSTURA de uma emenda que naquele
+            # layout nao existe, e pousou no meio do mockup de pagina branca. Contraste
+            # medido no quadro entregue: 1,52:1, contra 11,7 e 14,3 nos outros trechos.
+            # Quem sabe se ha DOIS paineis e o overlay, que le o config (`split: true`);
+            # da footage vem so o TEMPO. Entao interseco: janela da footage que nao
+            # encosta em nenhuma janela de split do overlay nao e split, e sai.
+            if _jf and janelas_split:
+                _int = [(a, b) for a, b in _jf
+                        if any(min(b, d) - max(a, c) > 0.05 for c, d in janelas_split)]
+                _fora = len(_jf) - len(_int)
                 print(f"   [relogio] janelas de split da FOOTAGE ({_fj.name}): "
-                      f"{len(_jf)} janelas no lugar das {len(janelas_split)} do overlay",
-                      flush=True)
+                      f"{len(_int)} no lugar das {len(janelas_split)} do overlay"
+                      + (f"; {_fora} descartada(s): tela cheia (cheio/pip), nao split"
+                         if _fora else ""), flush=True)
+                if _int:
+                    janelas_split = _int
+            elif _jf:
+                print(f"   [relogio] janelas de split da FOOTAGE ({_fj.name}): "
+                      f"{len(_jf)} janelas (overlay nao marcou nenhuma)", flush=True)
                 janelas_split = _jf
     except Exception as _e:
         print(f"   [relogio] footage json ilegivel ({_e}); seguindo com o do overlay",
@@ -734,6 +905,40 @@ def main(cfg_path):
         if n:
             print(f"   [split] {n} grupo(s) de legenda na COSTURA dos paineis "
                   f"(nem na testa nem na boca dele)", flush=True)
+    # TINTA INVERTIDA ONDE O FUNDO E CLARO (28/08/2026), decidida grupo a grupo e no
+    # INSTANTE em que o grupo esta na tela, nao pelo arquivo inteiro. Mede a fonte no
+    # meio do grupo: e o instante que ele passa mais tempo mostrando, e a mesma logica
+    # de "onde ele vive a maior parte do tempo" que a costura ja usa.
+    _fmp4 = V1 / "output" / f"{ad}_{look}_footage_1x.mp4"
+    if _fmp4.exists():
+        # CAMINHO BOM: mede a footage renderizada, na faixa exata da legenda.
+        n = 0
+        for g in groups:
+            _cls = ("costura" if g.get("costura")
+                    else ("baixa" if g.get("baixa") else "padrao"))
+            _r = fundo_claro_footage(_fmp4, g["start"], g["end"], _cls)
+            if _r:
+                g["claro"] = True
+                n += 1
+        print(f"   [fundo claro] {n} de {len(groups)} grupo(s) com tinta INVERTIDA, "
+              f"medidos na footage ({_fmp4.name})", flush=True)
+    elif mapa_insert:
+        # PRIMEIRA RODADA DE UM AD NOVO: sem footage pra medir, cai no arquivo-fonte no
+        # instante do grupo. E aproximado (o painel mostra um recorte do asset), e o
+        # build seguinte ja converge pro caminho de cima.
+        n = 0
+        for g in groups:
+            _meio = (g["start"] + g["end"]) / 2.0
+            _jan = next((w for w in mapa_insert if w["a"] <= _meio <= w["b"]), None)
+            if not _jan:
+                continue
+            _tsrc = _jan["start"] + max(0.0, _meio - _jan["s2"]) * _jan["speed"]
+            if fundo_claro(_jan["file"], round(_tsrc, 1)):
+                g["claro"] = True
+                n += 1
+        if n:
+            print(f"   [fundo claro] {n} grupo(s) com tinta INVERTIDA pelo ARQUIVO-FONTE "
+                  f"(sem footage ainda; o proximo build mede na footage)", flush=True)
     for g in groups:
         if g["end"] > logo_start:
             g["end"] = logo_start
@@ -765,23 +970,61 @@ def main(cfg_path):
     # nenhum texto na tela, e vaos como esse somavam 12% (o teto do gate) com o
     # estrategista apontando exatamente essa janela como a virada da dor rodando muda.
     # O eco (mesma frase no lettering E na legenda) continua descartado por inteiro.
+    # ECO PARCIAL TAMBEM SAI (31/08/2026, Julio por WhatsApp sobre o "SABE POR QUE?"). A
+    # legenda "I.A... sabe por" terminava 0,5s antes do lettering "sabe / por que?" subir:
+    # nao ha sobreposicao de tempo, ha a MESMA frase duas vezes seguidas, e e isso que le
+    # como "lettering e legenda ao mesmo tempo, fica confuso". O filtro de eco so
+    # descartava legenda INTEIRA igual ao lettering. Agora, se a cauda da legenda repete
+    # palavras do lettering que vem logo depois, essas palavras saem da legenda (a
+    # frase fica so no lettering, que e quem tem peso). Sobrando menos de duas palavras
+    # ou menos de 0,30s, o grupo sai inteiro.
+    def _sem_eco_na_cauda(g):
+        gw = [(w, norm(w["text"])) for w in g["words"]]
+        for ls, le, toks in lett_phrases:
+            if not (g["end"] > ls - LETT_LOOKBACK and g["start"] < le + 0.2):
+                continue
+            k = len(gw)
+            while k > 0 and gw[k-1][1] and gw[k-1][1] in toks:
+                k -= 1
+            if k == len(gw):
+                continue
+            if k < 2:
+                return None
+            novo = dict(g); novo["words"] = [w for w, _ in gw[:k]]
+            novo["end"] = round(min(g["end"], novo["words"][-1]["end"] + 0.35), 3)
+            if novo["end"] - novo["start"] < 0.30:
+                return None
+            return novo
+        return g
+
     _aparados = []
     for g in groups:
         if _echoes_lettering(g):
             continue
+        g = _sem_eco_na_cauda(g)
+        if g is None:
+            continue
         fatias = [dict(g)]
+        # LEGENDA E LETTERING NAO DIVIDEM A TELA (31/08/2026, Julio por WhatsApp: no
+        # "SABE POR QUE?" aparece lettering e legenda ao mesmo tempo, "precisa escolher,
+        # senao fica confuso"). A folga de 0,05s era menor que a animacao de entrada e
+        # saida do lettering, entao a legenda ainda estava na tela quando o lettering
+        # subia. Folga de 0,35s de cada lado cobre a animacao, e pedaco de legenda que
+        # sobra com menos de 0,60s nao entra: um piscar de duas palavras entre dois
+        # letterings e ruido, nao informacao.
+        FOLGA_LETT, PECA_MIN = 0.35, 0.60
         for ws, we in sorted(lett_windows):
             prox = []
             for f in fatias:
-                if not (f["start"] < we and f["end"] > ws):
+                if not (f["start"] < we + FOLGA_LETT and f["end"] > ws - FOLGA_LETT):
                     prox.append(f); continue
-                antes = {**f, "end": round(min(f["end"], ws - 0.05), 3)}
-                depois = {**f, "start": round(max(f["start"], we + 0.05), 3)}
+                antes = {**f, "end": round(min(f["end"], ws - FOLGA_LETT), 3)}
+                depois = {**f, "start": round(max(f["start"], we + FOLGA_LETT), 3)}
                 for peca in (antes, depois):
                     peca["words"] = [w for w in f["words"]
                                      if peca["start"] <= (w["start"] + w["end"]) / 2
                                      <= peca["end"]]
-                    if peca["end"] - peca["start"] >= 0.30 and peca["words"]:
+                    if peca["end"] - peca["start"] >= PECA_MIN and peca["words"]:
                         prox.append(peca)
             fatias = prox
         _aparados.extend(fatias)
@@ -883,6 +1126,15 @@ def main(cfg_path):
             _ra = None
     if _ra is not None:
         _runs.append((_ra, _rb))
+    # CHIP DESLIGADO NA ORIGEM (29/08/2026, segunda ordem do Julio sobre o mesmo
+    # assunto: ele mandou o print de "DEMORA" e perguntou "eu nao tinha pedido pra tirar
+    # esse tipo de coisa?"). O CSS ja esconde nos dois templates; aqui ele para de ser
+    # GERADO, pra nao ficar marcacao morta esperando alguem religar sem saber por que
+    # saiu. O motivo: pilula com pontinho fingindo status, e o texto so repetia em caixa
+    # alta uma palavra que o apresentador tinha acabado de falar.
+    # A logica de achar os vaos continua abaixo, intacta, caso um dia entre outra coisa
+    # nesses vaos que nao seja enfeite.
+    CHIP_LIGADO = False
     chips = []
     _ult_chip = -1e9
     # VAOS MAIORES PRIMEIRO (18/08/2026): com a ordem cronologica, o espacamento
@@ -890,7 +1142,7 @@ def main(cfg_path):
     # vao menor 7,7s antes ja tinha levado o dele). Espacamento minimo 6s.
     _runs = sorted(_runs, key=lambda r: r[1] - r[0], reverse=True)
     for _ra, _rb in _runs:
-        if _rb - _ra < 7.0 or len(chips) >= 4:
+        if not CHIP_LIGADO or _rb - _ra < 7.0 or len(chips) >= 4:
             continue                       # vao curto ja e dinamico por natureza
         _tc = _ra + 1.2
         if _tc < 5.5:
@@ -1009,7 +1261,13 @@ def main(cfg_path):
         bh.append(
             f'<div id="{bid}_scrim" class="broll-scrim clip" data-start="{b["s"]}" data-duration="{b["d"]}" data-track-index="{sk}"></div>\n'
             f'<div id="{bid}_tag" class="broll-tag clip" data-start="{b["s"]}" data-duration="{b["d"]}" data-track-index="{tag_tk}">'
-            f'<span class="rec"></span><span class="t">{b["label"]}</span></div>\n'
+            # SEM O PONTINHO ACESO (28/08/2026, Julio: "esses itens aqui tem muito cara
+            # de ia"). O `<span class="rec">` era um circulo ambar com brilho, imitando
+            # indicador de ao vivo/gravando. Nao indicava nada: o insert nao esta sendo
+            # gravado naquele instante e o ponto nunca muda de estado. Enfeite que finge
+            # status e um dos tells mais diretos de interface gerada, e era o elemento
+            # que mais saltava no print que ele mandou.
+            f'<span class="t">{b["label"]}</span></div>\n'
             f'<video id="{bid}_vid" class="broll-vid clip" src="{b["src"]}" muted playsinline data-start="{b["s"]}" data-duration="{b["d"]}" data-track-index="{tk}"></video>')
         bj.append({"id": bid, "src": b["src"], "start": b["s"], "dur": b["d"], "tk": tk, "sk": sk})
     html = re.sub(r"<!-- B-ROLLS \(injected\) -->.*?<!-- LOWER THIRD -->",

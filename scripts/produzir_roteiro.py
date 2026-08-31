@@ -37,6 +37,11 @@ DARK="0x141210"
 CAP = os.environ.get("CAP","1")=="1"
 BAKE_LETTERING = os.environ.get("VAM_BAKE_LETTERING","0")=="1"  # 1 = serif baked nas cenas de lettering (ad01+)
 LETTER_STYLE = os.environ.get("VAM_LETTER_STYLE","atual")  # "atual"=laranja chapado (ad34) | "foil"=gradiente metalico EA Premium (AD01+)
+# VERSAO do render por segmento (31/08/2026, cache por segmento). Entra na chave sha256
+# de cache_segmento.chave_segmento(): mude este valor sempre que qualquer r_orig/r_insert/
+# r_split_tela/r_lettering_serif mudar o filtro de video, senao o build proximo reaproveita
+# cache velho (pixel errado) achando que e o mesmo segmento.
+VERSAO_RENDER = "v1"
 REFRAME = "scale=2376:4224:force_original_aspect_ratio=increase,crop=2160:3840:108:652"
 # PIPY 150 -> 290 (20/08/2026, medido pelo diretor de arte): com 150 o circulo ia de
 # y150 a y450 e a safe zone do Reels comeca em y269, ou seja 119px (40% do circulo)
@@ -76,7 +81,27 @@ XFT=os.environ.get("VAM_XF_TIPO","auto")   # "auto" = por corte; ou um nome fixo
 if XFT=="fadeblack" or XFT=="fadewhite":
     sys.exit(f"ERRO: VAM_XF_TIPO={XFT} pisca a tela no meio do corte. Use auto.")
 
-def xf_dur(bloco_que_entra):
+
+def _lum_primeiro_quadro(path):
+    """Luminancia media do primeiro quadro de um arquivo, em 0-255. -1 se nao medir."""
+    # SO O PAINEL DE CIMA (31/08/2026, build 40). Media do quadro inteiro nao pegou o
+    # defeito: o painel de cima estava preto mas o apresentador embaixo puxava a media
+    # para 46. O buraco e sempre no painel do insert, entao mede-se os 60% de cima.
+    # RELATIVO AO TERCEIRO QUADRO (31/08/2026, build 41). O limiar absoluto de 12 nao
+    # pegou: o quadro preto do s02 media 15,6 (o fundo do painel nao e preto puro) e os
+    # seguintes 61 a 65. Preto de verdade e o que esta MUITO abaixo do que vem logo
+    # depois. Devolve a razao primeiro/terceiro em 0-255 escalada: <0,5 = descarta.
+    r=subprocess.run(["ffmpeg","-v","error","-i",path,"-frames:v","3","-vf",
+                      f"crop={W}:{int(H*0.6)}:0:0,format=gray,scale=32:32",
+                      "-f","rawvideo","-pix_fmt","gray","-"],
+                     capture_output=True)
+    d=r.stdout
+    if len(d)<3*1024: return 255
+    f0=sum(d[:1024])/1024.0; f2=sum(d[2048:3072])/1024.0
+    if f2<=0: return 255
+    return 255.0*f0/f2      # <128 significa menos da metade da luz do terceiro quadro
+
+def xf_dur(bloco_que_entra, bloco_que_sai=None):
     """Duracao da transicao que ENTRA neste bloco. Assimetrica de proposito.
 
     Entrada de insert = corte seco (XF_SECO). Volta pro avatar = whip (XF). Ver o
@@ -85,10 +110,42 @@ def xf_dur(bloco_que_entra):
     """
     if XFT != "auto":
         return XF
-    return XF_SECO if bloco_que_entra["type"] in ("insert", "logo", "lettering_logo") else XF
+    # DURACAO SECA TAMBEM ENTRE DOIS PLANOS DO APRESENTADOR (29/08/2026). Trocar so o
+    # TIPO esconderia a faixa do deslize sem tirar; encurtar so a DURACAO deixaria o
+    # deslize acontecendo rapido demais, que e outro jeito de piscar. Os dois juntos e
+    # que fazem virar corte.
+    import produzir_transicao as _pt
+    # XF_CORTE (1 quadro) FOI REVERTIDO (29/08/2026). A ideia era virar corte de verdade
+    # pra recuperar o ritmo, e o efeito medido foi outro: a footage caiu de 120,40s para
+    # 102,20s, ou seja 18 segundos a menos que o audio de 121,3s, e o composite (que corta
+    # pelo mais curto) entregou 76,2s em vez de 90,0s. O anuncio saiu MUTILADO.
+    # O ritmo tambem piorou em vez de melhorar: 12,6 cortes/min contra 14,1.
+    # Licao: duracao de transicao nao e so estetica, ela entra na conta de offset do
+    # xfade e mexe no comprimento da peca. Encurtar transicao encurta o filme.
+    # Corte de verdade (sem blend nenhum) exige nao usar xfade nessa fronteira, que e
+    # mudanca de estrutura do grafo de filtros, nao de constante.
+    # JUNCAO SECA E CONCAT, ENTAO A CAUDA E ZERO (31/08/2026). O segmento anterior era
+    # renderizado com (e-s)+xf de sobra pra o xfade consumir; com concat nao ha
+    # sobreposicao, entao cauda maior que zero viraria um quadro a mais por corte
+    # (12 cortes = 0,4s de deriva). Zero aqui e o que faz a soma fechar.
+    if (_pt.corte_seco_entre(bloco_que_sai, bloco_que_entra)
+            or bloco_que_entra["type"] in ("insert", "logo", "lettering_logo")):
+        return 0.0
+    return XF
 
 
-def xf_tipo(bloco_que_entra, i):
+def xf_tipo(bloco_que_entra, i, bloco_que_sai=None):
+    """Delegado pro `produzir_transicao`, que e modulo e tem teste.
+
+    A regra nova (29/08/2026): apresentador -> apresentador e corte SECO. Ver o defeito
+    de t=56,03s documentado la. O corpo antigo continua abaixo como referencia morta? Nao:
+    foi movido inteiro, pra nao existirem duas verdades sobre a mesma escolha.
+    """
+    import produzir_transicao as _pt
+    return _pt.tipo_de_transicao(bloco_que_sai, bloco_que_entra, i, forcado=XFT)
+
+
+def _xf_tipo_legado(bloco_que_entra, i):
     """Transicao do corte que ENTRA neste bloco. Nenhuma escurece nem amplia o quadro.
 
     Medido em material real do AD14 (testar_transicoes.py), no corte mais duro do ad:
@@ -136,10 +193,26 @@ else:
       "imers":           {"file":os.path.join(BASE,"inserts","imersao.mp4"),"start":3,"speed":1.5,"zoom":1.0},
     }
 def find_insert(instr):
-    s=instr.lower()
-    for k,v in INSERTS.items():
-        if k in s: return v
-    return list(INSERTS.values())[0]
+    """Insert que a instrucao do roteiro pede, casado por keyword.
+
+    FALHA ALTO QUANDO NAO ACHA (28/08/2026). O `return list(INSERTS.values())[0]` que
+    estava aqui trocava o asset EM SILENCIO: bloco cuja keyword nao batesse passava a
+    mostrar o PRIMEIRO insert do config, e nada no log dizia isso. O outro motor
+    (`gen_ad_v2.py`) ja fazia `sys.exit` no mesmo caso, entao os dois discordavam sobre o
+    que e erro: um parava o build e o outro entregava a peca com o asset trocado.
+    Quem pagaria a conta e quem tentasse a correcao mais obvia do mundo, tirar um insert
+    do config: o bloco nao some, ele silenciosamente vira outro asset.
+    Substituicao muda o que aparece na tela, entao nao pode ser decisao de fallback.
+    """
+    s = instr.lower()
+    for k, v in INSERTS.items():
+        if k in s:
+            return v
+    raise SystemExit(
+        f"ERRO: nenhum insert do config casa com a instrucao {instr!r}.\n"
+        f"       keywords disponiveis: {', '.join(sorted(INSERTS))}\n"
+        "       Corrija a keyword no roteiro ou a entrada no *_inserts.json. "
+        "Trocar de asset em silencio nao e opcao.")
 
 # ---------- alinhar narracao ao audio do avatar ----------
 def align(avatar, narr_words):
@@ -494,7 +567,30 @@ def _aspecto(src):
     return _CACHE_ASPECTO[src]
 
 
-def _fg_painel_mockup(src, expo=""):
+
+_CACHE_LARG = {}
+
+
+def _largura_fonte(src):
+    """Largura em pixels do arquivo-fonte, por ffprobe. Cacheada.
+
+    O push-in precisa saber o quanto o asset ENCOLHEU para caber na janela, e isso e a
+    razao entre a largura da janela e a largura nativa. Medida, nunca declarada: o campo
+    do config pode estar velho, o arquivo nao.
+    """
+    if src in _CACHE_LARG:
+        return _CACHE_LARG[src]
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                        "-show_entries", "stream=width", "-of", "csv=p=0", str(src)],
+                       capture_output=True, text=True)
+    try:
+        _CACHE_LARG[src] = int(r.stdout.strip().split(",")[0])
+    except Exception:
+        _CACHE_LARG[src] = None
+    return _CACHE_LARG[src]
+
+
+def _fg_painel_mockup(src, expo="", dur=None, start=0.0):
     """Painel de cima com o asset INTEIRO dentro de uma moldura de navegador.
 
     Ordem do Julio (26/08/2026), depois de reprovar o jh13 e de me ver teorizando
@@ -539,7 +635,23 @@ def _fg_painel_mockup(src, expo=""):
     print(f"  [mockup] {os.path.basename(src)}: aspecto {asp:.2f} -> janela {jw}x{jh}, "
           f"card {m['card_w']}x{m['card_h']} (asset INTEIRO, sem recorte)", flush=True)
     png = destino.replace("\\", "/").replace(":", "\\:")
-    return (f"[t2]{expo}scale={jw}:{jh},setsar=1[tvid];"
+    # PUSH-IN (28/08/2026, excecao autorizada pelo Julio). O asset entra INTEIRO em
+    # t=0 e a camera avanca depois, so o quanto ele encolheu para caber. Toda a regra,
+    # com os numeros e o porque, mora em `push_in.py`, que e modulo e tem teste; aqui
+    # so entra o trecho de filtro. Sem avanco a string vem vazia e o filtro fica
+    # identico ao de antes, entao asset que ja entra grande nao muda em nada.
+    import push_in as _pi
+    _esc = jw / float(m.get("janela_w_fonte") or jw) if m.get("janela_w_fonte") else None
+    _mov = ""
+    if dur:
+        _lf = _largura_fonte(src)
+        if _lf:
+            _mov = _pi.filtro(jw / _lf, dur, FPS, jw, jh, _pi.foco_do_conteudo(src, start))
+            if _mov:
+                _z = _pi.fator_push_in(jw / _lf)
+                print(f"  [push-in] {os.path.basename(src)}: fonte {_lf}px entra a "
+                      f"{jw / _lf:.3f} da largura, avanca ate {_z:.2f}x", flush=True)
+    return (f"[t2]{expo}scale={jw}:{jh},setsar=1{_mov}[tvid];"
             f"color=black@0:s={cw}x{ch}:r={FPS},format=rgba,setsar=1[tcv];"
             f"[tcv][tvid]overlay={vx}:{vy}:shortest=1[tcard];"
             f"movie={png},format=rgba,setsar=1[tmold];"
@@ -631,7 +743,8 @@ def r_split_tela(cfg, text, s, e, out, wt=None):
           # navegador, em vez de o motor escolher que pedaco mostrar. Ordem do Julio:
           # "o video todo que aparece no video e o que precisa". O `crop` declarado
           # deixa de valer no split, e era ele que causava a ampliacao de 1,5x a 2,4x.
-          + _fg_painel_mockup(src, _eq_exposicao(cfg)) +
+          + _fg_painel_mockup(src, _eq_exposicao(cfg), dur=(e - s),
+                             start=float(cfg.get("start", 0) or 0)) +
           f"[tbg][tfg]overlay=(W-w)/2:(H-h)/2,setsar=1[top];"
           + _split_avatar(s, d) +
           f"color={DARK}:s={W}x{H}:r={FPS}[cv];"
@@ -775,6 +888,15 @@ def r_insert_moldura(cfg, text, s, e, out, wt=None):
     print(f"  [mockup cheio] {os.path.basename(src)}: janela {jw}x{jh} no quadro inteiro",
           flush=True)
     png = destino.replace("\\", "/").replace(":", "\\:")
+    import push_in as _pi
+    _mov_cheio = ""
+    _lf = _largura_fonte(src)
+    if _lf:
+        _mov_cheio = _pi.filtro(jw / _lf, d, FPS, jw, jh, _pi.foco_do_conteudo(src, st))
+        if _mov_cheio:
+            print(f"  [push-in cheio] {os.path.basename(src)}: fonte {_lf}px entra a "
+                  f"{jw / _lf:.3f}, avanca ate {_pi.fator_push_in(jw / _lf):.2f}x",
+                  flush=True)
     # FUNDO CONGELADO (27/08/2026). O fundo desfocado rodava AO VIVO junto com o card,
     # entao a gravacao de tela por baixo piscava: medido nas laterais do quadro, 35,2 de
     # luminancia em t=82,8s, 149,7 em t=83,0s e 48,3 em t=84,3s. O medidor de ritmo
@@ -803,7 +925,10 @@ def r_insert_moldura(cfg, text, s, e, out, wt=None):
           f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
           f"boxblur=60:2,eq=brightness={_bg_offset(src, cfg):.3f}:saturation=0.7,"
           f"setsar=1[bg];"
-          f"[t2]{_eq_exposicao(cfg)}scale={jw}:{jh},setsar=1[vid];"
+          # PUSH-IN TAMBEM AQUI (29/08/2026). Estava so no split, e tela cheia sao
+          # 18,01s do anuncio com o mesmo problema: o asset encolhe para caber e o
+          # texto dele nao le. Mesma regra, mesmo modulo, mesmo teto.
+          f"[t2]{_eq_exposicao(cfg)}scale={jw}:{jh},setsar=1{_mov_cheio}[vid];"
           f"color=black@0:s={cw}x{ch}:r={FPS},format=rgba,setsar=1[cv];"
           f"[cv][vid]overlay={vx}:{vy}:shortest=1[card];"
           f"movie={png},format=rgba,setsar=1[mold];"
@@ -1293,49 +1418,170 @@ total=spans[-1][1]
 print(f"{len(blocks)} blocos | total {total:.1f}s")
 
 N=len(blocks)
-# cada bloco menos o ultimo ganha handle XF no fim (spans sao contiguos)
-segs=[]; letter_ranges=[]   # ranges (avatar-time) das cenas serif -> blankar legenda do Submagic
-for i,(b,(s,e)) in enumerate(zip(blocks,spans)):
+# RENDER EM PARALELO POR SEGMENTO (31/08/2026, build 42->43). Este loop renderizava os
+# 43 segmentos um ffmpeg atras do outro: ~7 min de um build de ~20 (o passo [4/6] sozinho
+# e a maior fatia). Cada segmento e independente (recebe bloco+span+out e escreve um mp4),
+# entao vira pool de threads (o ffmpeg roda em subprocess, o GIL nao pesa).
+# DEPENDENCIA REAL ENTRE VIZINHOS (a unica achada): o jump cut de escala em "orig" e
+# "lettering" alterna contra `blocks[i-1]["_base"]`, e o proprio loop escrevia `_base`
+# no bloco atual pra o proximo ler. Isso e sequencial por natureza (cada base depende da
+# anterior) mas NAO depende de render nenhum: e so decisao de numero. Por isso ela sai
+# do pool e vira um PASSE 1 sequencial e barato (sem ffmpeg), exatamente com a mesma
+# logica que o loop original tinha; o PASSE 2 (o ffmpeg de verdade) roda em paralelo,
+# cada thread so lendo `b["_base"]` ja decidido, nunca escrevendo no bloco do vizinho.
+# `segs`/`letter_ranges` viram listas append-only preenchidas POR INDICE (nao por ordem
+# de termino), pra o resto do arquivo (cadeia xfade, timing.json) continuar recebendo os
+# segmentos na mesma ordem de sempre.
+import concurrent.futures
+import hashlib
+import shutil
+import cache_segmento
+
+VAM_CACHE_SEG = os.environ.get("VAM_CACHE_SEG", "1") != "0"
+CACHE_DIR = os.path.join(TMP, "cache")
+if VAM_CACHE_SEG:
+    os.makedirs(CACHE_DIR, exist_ok=True)
+
+# ---- PASSE 1 (sequencial, sem ffmpeg): decide b["_base"] de cada bloco em ordem ----
+for i, b in enumerate(blocks):
+    # DEPOIS DE INSERT, ESCALA 1,0 SEMPRE (31/08/2026, build 44). As fatias que o plano de
+    # ritmo cria ja chegam com `_base` (linha do `_novo["_base"] = _seg["base"]`), entao a
+    # regra "se vier de insert, volta em 1,0" nao valia pra elas: a fatia de apresentador
+    # logo depois do split entrou ampliada, o queixo desceu ate a faixa da legenda e o
+    # gate de colisao pegou 7,5% do rosto coberto em t=10,5s. A troca de imagem ja e o
+    # corte; ampliar ali nao compra nada e custa a legenda.
+    if i > 0 and b["type"] in ("orig", "lettering") and \
+            blocks[i-1]["type"] in ("insert", "logo", "lettering_logo"):
+        b["_base"] = 1.0
+        continue
+    if b["type"] == "orig":
+        # `_base` NUNCA ERA PREENCHIDO (31/08/2026, build 41): o r_orig documenta o jump
+        # cut por escala (1,00 / 1,14 / 1,28) mas nenhum modulo grava `_base`, entao todo
+        # bloco de apresentador entrava em 1,0 e fronteira orig->orig tinha scene 0,008.
+        # Mesma regra do lettering: alterna contra o bloco anterior se ele tambem for
+        # apresentador; se vier de insert, volta em 1,0 (a troca de imagem ja e o corte).
+        if "_base" not in b:
+            _prev = blocks[i-1] if i>0 else None
+            _prev_apres = _prev is not None and _prev["type"] not in ("insert","logo","lettering_logo")
+            b["_base"] = (1.14 if _prev.get("_base",1.0) < 1.07 else 1.0) if _prev_apres else 1.0
+    elif b["type"] == "lettering":
+        # JUMP CUT TAMBEM NO LETTERING (31/08/2026, build 40). O bloco de lettering e
+        # apresentador por baixo, e era renderizado sem `base`: a imagem seguia igual a
+        # do bloco vizinho e a fronteira nao existia visualmente (scene 0,01). Com a
+        # juncao seca isso ficou nu: 16 de 33 fronteiras planejadas sem corte visivel e
+        # o ritmo medido caiu a 14,7/min. A escala alterna contra o bloco ANTERIOR, o
+        # mesmo jump cut de reel que os sub-planos do apresentador ja usam.
+        _bprev = blocks[i-1].get("_base",1.0) if i>0 else 1.0
+        # 1,28 e nao 1,14 (build 41): o salto de 14% deu scene 0,12 a 0,21 nas fronteiras,
+        # abaixo dos 0,30 que as referencias cruzam, e o olho concorda: 14% em rosto
+        # sobre fundo escuro le como tremida, nao como corte. 1,28 e o terceiro degrau
+        # que os sub-planos do apresentador ja usam.
+        # 1,14 e nao 1,28 (31/08, build 43): com 1,28 o rosto desceu ate a faixa da legenda
+        # (colisao: 7,6% do rosto em t=10,5s) e o ritmo medido NAO subiu (15,3/min nos
+        # dois). Escala maior nao comprou corte, so comprou colisao.
+        b["_base"] = 1.14 if _bprev < 1.07 else 1.0
+
+def _preparar_insert_cfg(b):
+    """Monta o cfg final do insert (mesma logica do loop antigo) uma unica vez, pra
+    servir tanto a chave de cache quanto o render de verdade: duplicar essa logica em
+    dois lugares e como a marcacao de layout do ritmo ja vazou silenciosamente antes."""
+    _c = find_insert(b["instr"])
+    if b.get("_layout"):
+        # O layout vem do PLANO DE RITMO e mora no bloco; o r_insert recebe o cfg do
+        # INSERT. Sem repassar aqui, a marcacao nunca chegava e as duas fatias
+        # marcadas "cheio" no jh13 renderizaram em split assim mesmo (conferido em
+        # quadro, t=37s e t=84s). Quarto ramo do mesmo erro do dia: emenda que
+        # compila, nao aplica.
+        _c = {**_c, "_layout": b["_layout"]}
+    if b.get("_crop"):
+        _c = {**_c, "crop": b["_crop"]}   # reenquadramento deste plano (jump cut)
+    if b.get("_fonte_off"):
+        # a fonte do insert continua de onde parou quando o plano volta pro rosto e
+        # depois retorna. `start` e em tempo de FONTE, entao o deslocamento entra
+        # multiplicado pela velocidade do insert.
+        _off = float(b["_fonte_off"]) * float(_c.get("speed", 1.0) or 1.0)
+        _c = {**_c, "start": float(_c.get("start", 0) or 0) + _off}
+    return _c
+
+def _render_segmento(i):
+    """Corpo do loop antigo pra UM segmento. So le `b["_base"]` (ja decidido no passe
+    1); nao escreve em nenhum bloco vizinho. Devolve (i, out, letter_range_ou_None)."""
+    b, (s, e) = blocks[i], spans[i]
     # o handle deste bloco alimenta a transicao que entra no bloco SEGUINTE, entao ele
     # tem que ser o XF DAQUELA transicao. Se divergir, o total muda e a footage deixa de
     # casar com o overlay (e o composite corta a cauda junto com o audio).
-    h=xf_dur(blocks[i+1]) if i<N-1 else 0.0
-    ee=e+h
-    out=os.path.join(TMP,f"s{i:02d}.mp4")
-    if   b["type"]=="orig":          r_orig(b["narr"],s,ee,out,wt=bwords[i],idx=i,
-                                            base=b.get("_base",1.0))
-    elif b["type"]=="insert":
-        _c = find_insert(b["instr"])
-        if b.get("_layout"):
-            # O layout vem do PLANO DE RITMO e mora no bloco; o r_insert recebe o cfg do
-            # INSERT. Sem repassar aqui, a marcacao nunca chegava e as duas fatias
-            # marcadas "cheio" no jh13 renderizaram em split assim mesmo (conferido em
-            # quadro, t=37s e t=84s). Quarto ramo do mesmo erro do dia: emenda que
-            # compila, nao aplica.
-            _c = {**_c, "_layout": b["_layout"]}
-        if b.get("_crop"):
-            _c = {**_c, "crop": b["_crop"]}   # reenquadramento deste plano (jump cut)
-        if b.get("_fonte_off"):
-            # a fonte do insert continua de onde parou quando o plano volta pro rosto e
-            # depois retorna. `start` e em tempo de FONTE, entao o deslocamento entra
-            # multiplicado pela velocidade do insert.
-            _off = float(b["_fonte_off"]) * float(_c.get("speed", 1.0) or 1.0)
-            _c = {**_c, "start": float(_c.get("start", 0) or 0) + _off}
-        r_insert(_c,b["narr"],s,ee,out,wt=bwords[i])
-    elif b["type"]=="logo":          r_logo(s,ee,out)
-    # lettering: BAKE_LETTERING (ad01) -> serif do TEXTO DE DESTAQUE (b["key"], coluna E da planilha,
-    # != legenda), avatar escurecido; blankar a legenda tay nessa cena. Default (ad34) -> talking-head limpo.
-    elif b["type"]=="lettering":
-        if BAKE_LETTERING:
-            r_lettering_serif(b.get("lead",""), b.get("key") or b["narr"], s, ee, out); letter_ranges.append((s,e))
-        else:
-            r_orig(b["narr"],s,ee,out,wt=bwords[i],idx=i)
-    elif b["type"]=="lettering_logo":
-        if BAKE_LETTERING:
-            r_lettering_serif(b.get("lead",""), b.get("key") or b["narr"], s, ee, out, withlogo=True); letter_ranges.append((s,e))
-        else:
-            r_orig(b["narr"],s,ee,out,wt=bwords[i],idx=i)
-    segs.append(out); print(f"  {i:2d} {b['type']:14} {s:5.1f}-{e:5.1f}s ok")
+    h = xf_dur(blocks[i+1], blocks[i]) if i<N-1 else 0.0
+    ee = e+h
+    out = os.path.join(TMP,f"s{i:02d}.mp4")
+    tipo = b["type"]
+    letter_range = None
+    _c = _preparar_insert_cfg(b) if tipo == "insert" else None
+    _sera_serif = tipo in ("lettering","lettering_logo") and BAKE_LETTERING
+    if _sera_serif:
+        letter_range = (s, e)
+
+    def _renderizar():
+        if   tipo=="orig":
+            r_orig(b["narr"],s,ee,out,wt=bwords[i],idx=i,base=b["_base"])
+        elif tipo=="insert":
+            r_insert(_c,b["narr"],s,ee,out,wt=bwords[i])
+        elif tipo=="logo":
+            r_logo(s,ee,out)
+        # lettering: BAKE_LETTERING (ad01) -> serif do TEXTO DE DESTAQUE (b["key"], coluna E da
+        # planilha, != legenda), avatar escurecido; blankar a legenda tay nessa cena. Default
+        # (ad34) -> talking-head limpo.
+        elif tipo=="lettering":
+            if BAKE_LETTERING:
+                r_lettering_serif(b.get("lead",""), b.get("key") or b["narr"], s, ee, out)
+            else:
+                r_orig(b["narr"],s,ee,out,wt=bwords[i],idx=i,base=b["_base"])
+        elif tipo=="lettering_logo":
+            if BAKE_LETTERING:
+                r_lettering_serif(b.get("lead",""), b.get("key") or b["narr"], s, ee, out, withlogo=True)
+            else:
+                r_orig(b["narr"],s,ee,out,wt=bwords[i],idx=i)
+
+    if not VAM_CACHE_SEG:
+        _renderizar()
+        print(f"  {i:2d} {tipo:14} {s:5.1f}-{e:5.1f}s ok")
+        return i, out, letter_range
+
+    # CACHE POR SEGMENTO: chave sha256 de tudo que decide o pixel final. Fonte (AVATAR
+    # ou o arquivo do insert) entra por mtime+tamanho, nao pelo caminho: o mesmo nome
+    # com conteudo trocado nao pode devolver cache velho.
+    fonte_path = _c["file"] if _c else AVATAR
+    try:
+        _st = os.stat(fonte_path)
+        fonte_stat = (_st.st_mtime, _st.st_size)
+    except OSError:
+        fonte_stat = (0.0, 0)
+    chave = cache_segmento.chave_segmento(
+        tipo=tipo, narr=b["narr"], s=s, e=e, ee=ee,
+        base=b.get("_base",1.0), layout=b.get("_layout"), insert_cfg=_c,
+        fonte_stat=fonte_stat, versao=VERSAO_RENDER)
+    cache_path = os.path.join(CACHE_DIR, chave+".mp4")
+    if os.path.exists(cache_path):
+        shutil.copyfile(cache_path, out)
+        print(f"  {i:2d} {tipo:14} cache")
+        return i, out, letter_range
+    _renderizar()
+    try:
+        shutil.copyfile(out, cache_path)
+    except OSError as _e:
+        print(f"  [AVISO] nao gravou cache do segmento {i:02d}: {_e}", flush=True)
+    print(f"  {i:2d} {tipo:14} {s:5.1f}-{e:5.1f}s ok")
+    return i, out, letter_range
+
+# ---- PASSE 2 (paralelo, com ffmpeg de verdade) ----
+_segs_por_i = [None]*N
+_letter_por_i = [None]*N
+_max_workers = int(os.environ.get("VAM_PARALELO","4"))
+with concurrent.futures.ThreadPoolExecutor(max_workers=_max_workers) as _ex:
+    for _i, _out, _lr in _ex.map(_render_segmento, range(N)):
+        _segs_por_i[_i] = _out
+        _letter_por_i[_i] = _lr
+segs = _segs_por_i
+letter_ranges = [lr for lr in _letter_por_i if lr is not None]
 
 # cadeia de xfade: DISSOLVE puro (transition=fade) -> nada desliza, entao a bolinha do PiP
 # nao "viaja" no corte. O ritmo/luz vem dos light-leaks (overlay abaixo), nao de slides.
@@ -1343,7 +1589,7 @@ durs=[vdur(p) for p in segs]
 # GATE de duracao: cada segmento tem que medir (e-s)+XF (ultimo: e-s). Segmento fora disso
 # desloca todos os blocos seguintes na cadeia e o pip/legenda dessincroniza do conteudo.
 for i,((s,e),d_real) in enumerate(zip(spans,durs)):
-    d_exp=(e-s)+(xf_dur(blocks[i+1]) if i<N-1 else 0.0)
+    d_exp=(e-s)+(xf_dur(blocks[i+1], blocks[i]) if i<N-1 else 0.0)
     if abs(d_real-d_exp)>0.1:
         sys.exit(f"ERRO seg {i:02d}: duracao {d_real:.2f}s != esperada {d_exp:.2f}s "
                  f"(fonte curta ou render quebrado); abortando pra nao montar video dessincronizado")
@@ -1365,24 +1611,84 @@ if XF < 0.01 and XF_SECO < 0.01:
             cut_centers.append(acc)
         acc=acc+durs[i]
     fc=["".join(f"[{i}:v]" for i in range(N))+f"concat=n={N}:v=1:a=0[vcat]"]
-    prev="vcat"; _secos=N-1
+    prev="vcat"; _secos=N-1; _xf_total=0.0
     print(f"  transicoes: concat puro, {N-1} corte(s) seco(s) sem blend")
 else:
+    # GRAFO MISTO (31/08/2026): juncao seca e CONCAT (zero blend, corte de verdade),
+    # volta macia e XFADE. Historico que obriga isso: xfade de 0,04s amortece o corte
+    # (o detector de cena e o olho veem degrau duplo), xfade de 1/30s COLAPSA a cadeia
+    # (build 36 saiu com 76s de 90, com codigo 0), e deslize em 2 quadros rasga o quadro
+    # (4 costuras achadas em 29/08). Concat nao tem nenhum dos tres.
+    # TIMEBASE UNICO: concat devolve tb 1/1000000 e os arquivos vem em 1/15360; o xfade
+    # exige os dois lados iguais. Toda entrada e toda saida intermediaria passam por
+    # settb=AVTB. Provado em repro sintetico (5 clipes, 18,000s exatos) antes de entrar.
+    # CONTAGEM EXATA DE QUADROS POR SEGMENTO (31/08/2026, build 39). Com concat, a cadeia
+    # saiu 0,86s mais curta que o plano e os cortes derivaram ate 0,5s no fim do video:
+    # cada segmento perdia ~1 quadro na emenda (24 juncoes secas x 1/30s = 0,8s). O xfade
+    # de antes escondia isso porque o offset era calculado do arquivo medido. Aqui cada
+    # segmento e forcado a K = nframes(bloco) + nframes(cauda) quadros: se sobrar, corta;
+    # se faltar, clona o ultimo. A soma da cadeia passa a ser aritmetica, nao medicao.
+    # QUADRO PRETO NA FRENTE (mesmo build, corte de 7,27s): o painel de cima entrava preto
+    # por um quadro enquanto o apresentador ja estava embaixo. O overlay do split com
+    # shortest=1 nao tem o primeiro quadro do insert pronto em t=0. O blend do xfade
+    # escondia; o concat mostra. Segmento cujo primeiro quadro e escuro perde esse quadro
+    # e ganha um clone no fim, entao a contagem nao muda.
+    _kf=[]
+    for i,(s,e) in enumerate(spans):
+        _xf_next = xf_dur(blocks[i+1], blocks[i]) if i<N-1 else 0.0
+        _kf.append(nframes(e-s)+nframes(_xf_next) if _xf_next>1e-6 else nframes(e-s))
+    fc=[]
+    for i in range(N):
+        _ini = 1 if _lum_primeiro_quadro(segs[i]) < 128 else 0
+        if _ini:
+            print(f"  seg {i:02d}: primeiro quadro preto, descartado", flush=True)
+        fc.append(f"[{i}:v]trim=start_frame={_ini},setpts=PTS-STARTPTS,fps={FPS},"
+                  f"tpad=stop_mode=clone:stop_duration=0.5,trim=end_frame={_kf[i]},"
+                  f"setpts=PTS-STARTPTS,settb=AVTB[n{i}]")
+    durs=[k/FPS for k in _kf]      # a partir daqui a duracao e a contada, nao a medida
+    acc=durs[0]
+    prev="n0"; _xf_total=0.0
     for i in range(1,N):
-        _xf=xf_dur(blocks[i])
-        if _xf<=XF_SECO+1e-6: _secos+=1
-        off=acc-_xf
-        fc.append(f"[{prev}][{i}:v]xfade=transition={xf_tipo(blocks[i],i)}:duration={_xf}:offset={off:.4f}[v{i}]")
+        _xf=xf_dur(blocks[i], blocks[i-1])
+        if _xf<=1e-6:
+            _secos+=1
+            fc.append(f"[{prev}][n{i}]concat=n=2:v=1:a=0,settb=AVTB[v{i}]")
+            centro=acc
+        else:
+            off=acc-_xf; _xf_total+=_xf
+            fc.append(f"[{prev}][n{i}]xfade=transition={xf_tipo(blocks[i],i,blocks[i-1])}:duration={_xf}:offset={off:.4f},settb=AVTB[v{i}]")
+            centro=off+_xf/2
         # corte "grande" = entra insert/logo/split/cta -> ganha light-leak quente
         if blocks[i]["type"] in ("insert","logo","lettering_logo") or \
            (blocks[i]["type"]=="lettering" and "time de" in blocks[i]["narr"].lower()):
-            cut_centers.append(off+_xf/2)
+            cut_centers.append(centro)
         prev=f"v{i}"; acc=acc+durs[i]-_xf
-    print(f"  transicoes: {_secos} corte(s) seco(s) de {XF_SECO}s + "
-          f"{N-1-_secos} whip(s) de {XF}s")
+    print(f"  transicoes: {_secos} corte(s) seco(s) por concat + "
+          f"{N-1-_secos} whip(s) de {XF}s por xfade")
 vchain0=os.path.join(TMP,"vchain0.mp4")
 run(["ffmpeg","-y",*inputs,"-filter_complex","; ".join(fc),"-map",f"[{prev}]",
      "-r",str(FPS),"-c:v","libx264","-pix_fmt","yuv420p","-an",vchain0])
+# GATE DE DURACAO DA CADEIA (31/08/2026). O build 36 perdeu 18,7s de fala e o ffmpeg
+# devolveu codigo 0: o -shortest do mux final aparou o resto em silencio. A cadeia tem
+# que medir a soma dos blocos; qualquer coisa diferente e colapso e aborta AQUI, antes
+# de gastar mais 10 minutos de composite num video mutilado.
+# ESPERADO = ARITMETICA DO GRAFO, NAO SOMA DOS SPANS (31/08/2026). A primeira versao
+# comparava com sum(e-s) e abortou o build 38 por 0,86s: cada segmento arredonda para
+# quadro inteiro (nframes) e ~30 segmentos acumulam sub-segundo. Isso nao e colapso.
+# Colapso e perder segundos: a cadeia medir menos que (soma dos segmentos renderizados
+# menos a sobreposicao dos whips). E contra ISSO que o gate compara. A diferenca para
+# a soma dos spans fica so no log, como aviso.
+_esp_cadeia=sum(durs)-_xf_total
+_real_cadeia=vdur(vchain0)
+_esp_spans=sum(e-s for s,e in spans)
+if abs(_esp_cadeia-_esp_spans)>0.5:
+    print(f"  AVISO cadeia: grafo soma {_esp_cadeia:.2f}s, spans somam {_esp_spans:.2f}s "
+          f"({_esp_cadeia-_esp_spans:+.2f}s de arredondamento/gaps)", flush=True)
+if abs(_real_cadeia-_esp_cadeia)>0.15:
+    sys.exit(f"ERRO cadeia: {_real_cadeia:.2f}s != {_esp_cadeia:.2f}s esperados "
+             f"(diferenca {_real_cadeia-_esp_cadeia:+.2f}s). A cadeia de transicoes colapsou; "
+             "abortando pra nao entregar video aparado.")
+print(f"  cadeia: {_real_cadeia:.2f}s (esperado {_esp_cadeia:.2f}s) ok")
 
 # LIGHT-LEAKS: bloom quente sutil (screen) nos cortes grandes -> "efeito de luz" sem mover conteudo
 vchain=os.path.join(TMP,"vchain.mp4")

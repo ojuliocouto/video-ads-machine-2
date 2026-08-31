@@ -80,13 +80,23 @@
         border-radius:24px; object-fit:contain; background:#0b0d14;
         border:1.5px solid rgba(255,255,255,.16);
         box-shadow:0 30px 90px rgba(0,0,0,.6); }
-      .broll-tag { position:absolute; left:36px; top:392px; z-index:15;
-        display:flex; align-items:center; gap:14px; padding:12px 26px; border-radius:100px;
-        background:rgba(12,13,20,.62); border:1px solid rgba(255,255,255,.18); backdrop-filter:blur(6px); }
-      .broll-tag .rec { width:11px; height:11px; border-radius:50%; background:rgba(255,180,120,.9);
-        box-shadow:0 0 12px rgba(255,180,120,.55); }
-      .broll-tag .t { font-family:"Inter"; font-weight:500; font-size:26px; letter-spacing:.5px;
-        color:rgba(255,255,255,.9); text-transform:none; }
+      /* PILULA DE LABEL: REMOVIDA (28/08/2026, ordem do Julio depois do print,
+         "esses itens aqui tem muito cara de ia").
+         Eram tres tells empilhados num elemento so:
+           1. o ponto ambar com brilho, imitando indicador de ao vivo/gravando, sem
+              nunca indicar coisa nenhuma;
+           2. a moldura (raio 100px, fundo translúcido, backdrop-filter, borda branca
+              fina), que e o chip de landing page de produto de IA;
+           3. a copy: dos 76 labels do ads_v2_configs, dois tercos NARRAVAM o que ja
+              estava na tela ("claude trabalhando" sobre um video do Claude
+              trabalhando, "dashboard pronto" sobre um dashboard).
+         O terceiro e o que nao tinha conserto de estilo: rotulo que descreve o visivel
+         nao acrescenta informacao, so denuncia quem escreveu. Editor rotula o que NAO
+         da pra ver (fonte, data, numero). Sem a pilula o insert fala sozinho, que e a
+         ordem antiga do Julio sobre asset: "o video todo que aparece e o que precisa".
+         O `labels` do config continua sendo lido (nomeia o broll no json de debug), so
+         nao vira elemento na tela. */
+      .broll-tag { display:none; }
 
       /* ---------- LOWER THIRD (TOP) ---------- */
       #lt { position:absolute; left:60px; top:270px; z-index:40;
@@ -109,13 +119,17 @@
          aparecem para prender atencao"). Pilula com a palavra-chave da fala nos vaos
          longos de avatar sem insert (REF-03 usa chips de UI perto da cabeca). Posicao
          alta a direita: acima do rosto (y~440+), abaixo da UI do Reels (~250). */
-      .chip { position:absolute; top:332px; right:60px; z-index:36; pointer-events:none;
-        font-family:"Inter"; font-weight:600; font-size:30px; letter-spacing:1px;
-        color:#fff; background:rgba(8,9,14,.82); border:1.5px solid rgba(255,255,255,.35);
-        border-radius:999px; padding:14px 26px 15px;
-        box-shadow:0 6px 24px rgba(0,0,0,.45); }
-      .chip .dot { display:inline-block; width:12px; height:12px; border-radius:50%;
-        background:#7bdc72; margin-right:12px; }
+      /* CHIP: REMOVIDO (29/08/2026, segunda ordem do Julio sobre o mesmo assunto).
+         Ele mandou o print de "• DEMORA" no canto e perguntou: "eu nao tinha pedido pra
+         tirar esse tipo de coisa?". Tinha. Na primeira vez eu matei so o `.broll-tag` e
+         declarei resolvido; o `.chip` e outro elemento com a MESMA linguagem e passou.
+         Os tres tells, os mesmos do outro: pilula com borda branca fina, pontinho
+         colorido fingindo status (nunca indicou nada), e texto que repete em caixa alta
+         uma palavra que o apresentador acabou de dizer, ou seja legenda a propria fala
+         com outro nome.
+         A regra que fica: enfeite que nao carrega informacao que a tela ainda nao tem
+         nao entra. */
+      .chip, .chip .dot { display:none; }
       /* DESCEU E ENCOLHEU (27/08/2026, auditoria do diretor de arte).
          Eram 560px do rodape, ou seja tinta terminando em y1360, dentro do rosto: em
          t=72,96s o bloco "TOCA EM / SAIBA MAIS" ocupava y1082-1491 com o labio
@@ -285,7 +299,7 @@
            deixa 7,76px; a palavra em "dizendo" a 1,06 cresce ~7,5px por lado numa
            palavra de 250px. Sobra 0,26px, e 16 de 63 grupos colavam.
            26px paga o crescimento com folga e o pico desce junto. */
-        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 42px;
+        display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:6px 30px;
         /* gap 26->42 JUNTO com o pico de escala 1,04->1,14 (28/08/2026): o pulo maior
            come ~11px por lado numa palavra de 320px, e a palavra que assenta ainda
            esta acima de 1,0 quando a proxima sobe. 26px voltaria a colar palavra,
@@ -363,6 +377,58 @@
          Nao muda de tamanho de proposito: a caixa e ancorada por `bottom`, entao
          crescer a largura empurraria pra duas linhas e o TOPO subiria pro queixo. */
       #caps .cw.kw { color:#E87D4E; }
+      /* PREENCHIMENTO LINEAR, NAO SALTO (29/08/2026, Julio por audio: "nao gosto
+         desse estilo onde a legenda sobe, fica pulando... gosto quando e uma cor, vai
+         preenchendo ela, de forma linear").
+         Cada palavra tem duas camadas do MESMO texto, na mesma caixa: `base` apagada e
+         `fill` acesa por cima. O GSAP corta a de cima com `clip-path` da esquerda pra
+         direita, entao a cor entra varrendo a palavra.
+         Historico do que ja foi reprovado aqui, pra nao voltar: escala por palavra
+         (colidia com a vizinha, "paginacompletamente" com 7px de vao), micro-pulo de
+         1,03 ("pulando mas muito pequeno") e salto vertical de 12 a 16px (este pedido).
+         A caixa NAO muda de tamanho em nenhum momento: as duas camadas ocupam o mesmo
+         espaco e so a mascara se move, entao nada reflui e nenhuma palavra empurra a
+         outra. */
+      #caps .cw { position:relative; display:inline-block; }
+      #caps .cw .base, #caps .cw .fill { display:block; }
+      #caps .cw .fill { position:absolute; left:0; top:0; white-space:pre;
+        clip-path:inset(0 100% 0 0); }
+      /* OPACIDADE DA CAMADA APAGADA: 52% -> 70% (29/08/2026, medido no build 32).
+         Com 52% o gate de contraste achou 30 faixas abaixo do piso, contra 9 no build
+         anterior: a palavra AINDA NAO FALADA caia para 3,2:1 sobre fundo escuro. O
+         espectador le a linha inteira, nao so a palavra do momento, entao palavra por
+         vir ilegivel e defeito, nao hierarquia.
+         70% e o meio entre os 52% que reprovaram e os 82% do desenho antigo, que nunca
+         teve reclamacao de leitura. A varredura de 70% para 100% continua visivel: foi
+         conferida no quadro, letra por letra, em "paginas". */
+      #caps .cw .base { color:rgba(245,239,230,.70); }
+      #caps .cw .fill { color:#F5EFE6; }
+      #caps .cw.kw .base { color:rgba(232,125,78,.62); }
+      #caps .cw.kw .fill { color:#E87D4E; }
+      /* sobre insert claro a tinta inverte, e as duas camadas invertem junto */
+      #caps .cgrp-claro .cw .base { color:rgba(18,20,26,.62); }
+      #caps .cgrp-claro .cw .fill { color:#12141A; }
+      #caps .cgrp-claro .cw.kw .base { color:rgba(178,67,26,.62); }
+      #caps .cgrp-claro .cw.kw .fill { color:#B2431A; }
+
+      /* TINTA INVERTIDA SOBRE FUNDO CLARO (28/08/2026). O grupo ganha `cgrp-claro` do
+         gen_ad_v2 quando o insert daquele trecho tem mediana de luminancia acima de 119,
+         que e onde o contraste de tinta branca cruza o piso de 4,5:1. No build 26 o
+         insert `pip` era um mockup de pagina branca e a legenda branca deu 1,52:1 no
+         quadro entregue, contra 11,7 e 14,3 nos trechos escuros do mesmo anuncio.
+         Por que invertendo a tinta e nao com tarja nem contorno mais grosso:
+           tarja  -> vetada pela Jheni em 19/08 ("me da panico, deixa esteticamente pobre")
+           halo   -> sobre branco o miolo funde com o fundo e a palavra le como contorno
+                     oco; foi o achado do diretor em t=19,5s (1,32:1) que tirou o halo.
+         Escuro sobre pagina branca da ~15:1 e nao muda geometria: mesma familia, peso,
+         corpo, tracking, posicao e animacao. So a cor troca, entao nenhuma calibragem
+         de caixa (que ja custou tres passadas) e mexida. O contorno vira claro pra
+         segurar a leitura quando o mockup tem area de meio-tom. */
+      #caps .cgrp-claro .cw { color:#12141A;
+        -webkit-text-stroke:0.078em rgba(255,255,255,.90);
+        filter:drop-shadow(0 3px 10px rgba(255,255,255,.55));
+        text-shadow:0 2px 4px rgba(255,255,255,.50); }
+      #caps .cgrp-claro .cw.kw { color:#B2431A; }
       /* DESTAQUE DA PALAVRA FALADA (27/08/2026, pedido do Julio: "um estilo de legenda
          mais legal, capcutizavel"). Tres estados, que e o que separa karaoke de
          pisca-pisca: por dizer (0.82), dizendo (1.0 + escala), ja dito (0.90).
@@ -379,7 +445,16 @@
          O padding da a reserva e o margin negativo devolve o espaco pro layout: o gap
          continua 14px e nada se move. 10px = 2,5% da palavra mais larga medida
          ("briefing", 320px de tinta a 80px, 8px por lado, com folga). */
-      #caps .cw { opacity:.82; transform-origin:50% 82%; will-change:opacity, transform; }
+      /* OPACIDADE CHEIA NA PALAVRA (29/08/2026). Este `.cw` tinha `opacity:.82`, que
+         era o estado "por dizer" do desenho ANTIGO: o GSAP subia pra 1 na palavra ativa
+         e devolvia pra 0,90 depois. Com o preenchimento linear a animacao de opacidade
+         saiu, e o 0,82 do CSS ficou valendo o tempo inteiro: medi o alpha do MOV e o
+         MAXIMO era 210 de 255, ou seja a legenda inteira renderizava a 82%.
+         Efeito colateral que denunciou: o gate de contraste, que mede tinta com alpha
+         cheio, passou a nao achar UMA faixa de legenda no anuncio todo e devolveu
+         "0 faixas" com PASSA. Gate que fica cego e pior que gate que reprova.
+         O apagado agora mora na COR da camada `.base`, nao na opacidade da palavra. */
+      #caps .cw { opacity:1; transform-origin:50% 82%; will-change:transform; }
       #caps .cw.on  { opacity:1; }
       #caps .cw.off { opacity:.90; }
       /* logo da OCC DENTRO do lettering (roteiro: "lettering + logo da occ").
@@ -648,12 +723,31 @@
           // escala e jitter, nao enfase. Palavra ativa salta 14% (18% a kw) com
           // overshoot de back.out: pulo unico e visivel, estilo CapCut, e assenta.
           // O dwell minimo acima impede o estrobo em palavra curta.
-          var pico = span.classList.contains("kw") ? 1.18 : 1.14;
-          gsap.set(span, { opacity: 0.85, scale: 1, transformOrigin: "50% 85%" });
-          tl.to(span, { opacity: 1, scale: pico, duration: 0.16,
-                        ease: "back.out(2.2)", overwrite: "auto" }, wStart);
-          tl.to(span, { opacity: 0.92, scale: 1, duration: 0.20,
-                        ease: "power2.inOut", overwrite: "auto" }, wEnd);
+          // SALTO VERTICAL, NAO ESCALA (28/08/2026, segunda passada). A escala por
+          // palavra colide com a vizinha por geometria, e nenhum gap resolve: com
+          // pico 1,18 "completamente" (560px de tinta) cresce 50px POR LADO e
+          // precisaria de 119px de gap, o que a linha de 820px nao comporta. Medido
+          // no MOV: "paginacompletamente" com 7px de vao. Escala maior = colisao
+          // maior; foi o pedido de "pular mais" batendo de frente com "nao colar".
+          // Salto em Y nao invade o vizinho: da a mesma energia (o Julio quer VER o
+          // pulo) sem disputar espaco horizontal. Junto: a palavra ativa ganha
+          // brilho, que e o que o CapCut usa pra marcar o karaoke.
+          // PREENCHIMENTO LINEAR (29/08/2026). O salto vertical saiu por ordem do
+          // Julio. A camada `fill` e revelada da esquerda pra direita durante a fala da
+          // palavra, com `ease: "none"` porque ele pediu LINEAR: qualquer easing faz a
+          // cor acelerar e desacelerar, que e exatamente o "zoado" que ele descreveu.
+          // A varredura dura o tempo REAL da palavra (nao um valor fixo), entao ela
+          // acompanha a fala em vez de correr na frente.
+          // Nada de `y`, `scale` nem `filter`: a palavra nao se move, nao cresce e nao
+          // empurra a vizinha. Foi movimento de palavra que gerou as tres reprovacoes
+          // anteriores.
+          var _fill = span.querySelector(".fill");
+          if (_fill) {
+            gsap.set(_fill, { clipPath: "inset(0 100% 0 0)" });
+            tl.to(_fill, { clipPath: "inset(0 0% 0 0)",
+                           duration: Math.max(wEnd - wStart, 0.12),
+                           ease: "none", overwrite: "auto" }, wStart);
+          }
         });
         // fade-out termina EXATAMENTE em gEnd (antes era gEnd-0.06 + 0.16s = gEnd+0.10,
         // vazava por cima do fade-in do proximo grupo e empilhava duas legendas)

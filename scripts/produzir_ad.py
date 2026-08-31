@@ -21,6 +21,7 @@ Uso:
   python3 produzir_ad.py --lote                  # todos que tem config
   python3 produzir_ad.py --status                # so mostra o veredito atual
 """
+import concurrent.futures
 import fcntl
 import json
 import os
@@ -30,6 +31,7 @@ import sys
 from pathlib import Path
 
 from caminhos import V2L  # noqa: E402  (era o proprio dir; agora e o _local, que guarda o estado)
+from gates_paralelo import rodar_em_paralelo
 GATE = Path.home() / ".claude" / "scripts" / "gate-ad.py"
 STATUS = V2L / "_status.json"
 
@@ -315,28 +317,47 @@ def build(ad, look, fmt="9x16"):
     return "OK ->" in saida
 
 
+def ate_do_cta(html_texto, a0, accel):
+    """Instante (no relogio do ENTREGUE) em que o CTA sobe, lido do overlay HTML.
+
+    O overlay grava `data-start` no relogio dele proprio: acelerado e deslocado por a0,
+    igual ao MOV que o gate de contraste consome (overlay = entregue * accel + a0).
+    O inverso disola o instante no relogio do arquivo entregue: (data_start - a0) / accel.
+    Devolve None se o elemento id="cta" nao existir no HTML (anuncio sem CTA marcado
+    ou overlay de uma versao antiga): nesse caso o gate mede o anuncio inteiro.
+    """
+    m = re.search(r'id="cta"[^>]*data-start="([\d.]+)"', html_texto)
+    if not m:
+        m = re.search(r'data-start="([\d.]+)"[^>]*id="cta"', html_texto)
+    if not m:
+        return None
+    data_start = float(m.group(1))
+    return (data_start - a0) / accel
+
+
 def gate(ad, fmt="9x16"):
     print(f"\n--- GATE AD{ad} {fmt} (obrigatorio, nao pulavel) ---", flush=True)
     if not GATE.exists():
         print(f"GATE AUSENTE em {GATE}. Sem gate nao ha entrega.", flush=True)
         return False, "gate ausente"
-    env = dict(os.environ, GATE_FMT=fmt)
-    r = subprocess.run([sys.executable, str(GATE), ad], capture_output=True, text=True, env=env)
-    print(r.stdout, flush=True)
-    motivos = [l.strip(" -") for l in r.stdout.split("\n") if l.strip().startswith("- ")]
-    ok = r.returncode == 0
 
-    # COLISAO DE TEXTO COM O ROSTO (17/08/2026): o Julio mandou quatro prints de um ad
-    # ja "aprovado" pelos outros gates, com legenda na boca dele e CTA atravessado na
-    # cara. Nenhum gate media isso, entao so o olho humano pegava, e depois de pronto.
-    # Agora e medido: rosto por Haar, tinta por alpha do overlay, e reprova antes de
-    # entregar. Ver ~/.claude/scripts/gate-colisao-texto.py.
-    # RITMO (26/08/2026): o `medir_ritmo.py` existe, funciona, retorna exit 1 e
-    # REPROVAVA o jh13 entregue (63% do anuncio em plano acima de 6s, teto 40%). E
-    # ninguem o chamava no build: `grep -rn medir_ritmo produzir_ad.py
-    # build_composite.py` nao devolvia nada. O ad saiu carimbado PRONTO no _status.json
-    # com o gate de ritmo reprovando, porque o gate estava desligado da tomada.
+    # PARALELIZACAO DOS GATES DE SAIDA (31/08/2026): gate-ad.py, medir_ritmo.py,
+    # gate-colisao-texto.py e gate-contraste-legenda.py rodavam em serie e juntos
+    # levavam uns 4,5 minutos, dentro de um build de 20. Sao processos independentes:
+    # todos leem o MESMO mp4 final, que o build ja deixou pronto antes de gate()
+    # comecar, e nenhum decide se o outro roda. Por isso os comandos sao MONTADOS
+    # primeiro (a montagem so olha arquivo em disco e env var, nunca resultado de
+    # outro gate) e DISPARADOS juntos via gates_paralelo.rodar_em_paralelo. Os
+    # posprocessamentos (mexer em ok/motivos, imprimir stdout) rodam DEPOIS, na
+    # MESMA ORDEM de sempre, entao o log continua legivel e identico em conteudo.
+    # A folha de contato continua depois, sozinha, sem paralelizar (ela nao reprova
+    # nada e depende so do mp4, mas nao ha ganho em disputar CPU com os gates).
+    tarefas = []
+    env_ad = dict(os.environ, GATE_FMT=fmt)
+
+    # RITMO (26/08/2026): ver historico completo no comentario original abaixo.
     # Regra da casa: checklist nao bloqueia, GATE bloqueia.
+    _tem_ritmo = False
     if os.environ.get("GATE_RITMO") != "0":
         _pref = "" if str(ad).startswith("jh") else "ad"
         _fin = sorted(V1.glob(f"output/{_pref}{ad}v2_*_v2composite_{fmt}.mp4"),
@@ -360,14 +381,13 @@ def gate(ad, fmt="9x16"):
                         _cmd += ["--a0", str(json.loads(_tj2.read_text()).get("a0", 0.0))]
                     except Exception:
                         pass
-            _rr = subprocess.run(_cmd, capture_output=True, text=True)
-            print(_rr.stdout, flush=True)
-            if _rr.returncode != 0:
-                ok = False
-                _ls = [l.strip() for l in _rr.stdout.split("\n") if "REPROVA" in l]
-                motivos.append("ritmo: " + "; ".join(_ls[:2])[:180])
+            tarefas.append(("ritmo", _cmd))
+            _tem_ritmo = True
 
+    # COLISAO DE TEXTO COM O ROSTO (17/08/2026): ver historico completo no comentario
+    # original abaixo. Ver ~/.claude/scripts/gate-colisao-texto.py.
     gcol = Path.home() / ".claude" / "scripts" / "gate-colisao-texto.py"
+    _tem_colisao = False
     if gcol.exists() and os.environ.get("GATE_COLISAO") != "0":
         pref = "" if str(ad).startswith("jh") else "ad"
         finais = sorted(V1.glob(f"output/{pref}{ad}v2_*_v2composite_{fmt}.mp4"),
@@ -408,12 +428,125 @@ def gate(ad, fmt="9x16"):
                     cmd += ["--a0", str(json.loads(_tj.read_text()).get("a0", 0.0))]
                 except Exception:
                     pass
-            rc = subprocess.run(cmd, capture_output=True, text=True)
-            print(rc.stdout, flush=True)
-            if rc.returncode != 0:
-                ok = False
-                extras = [l.strip() for l in rc.stdout.split("\n") if "texto cobre" in l]
+            tarefas.append(("colisao", cmd))
+            _tem_colisao = True
+
+    # CONTRASTE DA LEGENDA CONTRA O FUNDO (29/08/2026): ver historico completo no
+    # comentario original abaixo. Ver ~/.claude/scripts/gate-contraste-legenda.py.
+    gcon = Path.home() / ".claude" / "scripts" / "gate-contraste-legenda.py"
+    _tem_contraste = False
+    if gcon.exists() and os.environ.get("GATE_CONTRASTE") != "0":
+        pref = "" if str(ad).startswith("jh") else "ad"
+        finais = sorted(V1.glob(f"output/{pref}{ad}v2_*_v2composite_{fmt}.mp4"),
+                        key=lambda p: p.stat().st_mtime)
+        ovl = sorted((V2L).glob(f"render-{pref}{ad}v2-*-ovlonly/renders/*.mov"),
+                     key=lambda p: p.stat().st_mtime)
+        if finais and ovl:
+            from build_composite import ACCEL as _acc3
+            _tj3 = V1 / "output" / "timing.json"
+            a0_val = 0.0
+            if _tj3.exists():
+                try:
+                    a0_val = json.loads(_tj3.read_text()).get("a0", 0.0)
+                except Exception:
+                    pass
+            cmd = [sys.executable, str(gcon), str(finais[-1]), "--overlay", str(ovl[-1]),
+                   "--accel", str(_acc3), "--a0", str(a0_val), "--intervalo", "0.5"]
+            # --ate: instante em que o CTA sobe, lido do overlay HTML mais recente.
+            # Depois dele a tela e do botao e do logo, elementos com contraste proprio,
+            # nao legenda de fala. Sem achar o elemento, mede o anuncio inteiro.
+            _htmls = sorted(V2L.glob(f"render-{pref}{ad}v2-*-ovl/index_overlay.html"),
+                            key=lambda p: p.stat().st_mtime)
+            if _htmls:
+                ate = ate_do_cta(_htmls[-1].read_text(), a0_val, _acc3)
+                if ate is not None:
+                    cmd += ["--ate", str(ate)]
+            tarefas.append(("contraste", cmd))
+            _tem_contraste = True
+
+    # DISPARO: todos os comandos montados acima rodam ao mesmo tempo. O gate-ad.py
+    # precisa da env com GATE_FMT (os outros nao), entao roda num executor a parte,
+    # mas disparado ANTES de esperar os demais, entao continua tudo em paralelo de
+    # verdade: o subprocess do gate-ad ja esta rodando quando rodar_em_paralelo
+    # dispara e passa a esperar os outros tres.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _ex_ad:
+        _fut_ad = _ex_ad.submit(
+            subprocess.run, [sys.executable, str(GATE), ad],
+            capture_output=True, text=True, env=env_ad)
+        _res_outras = rodar_em_paralelo(tarefas, max_workers=4) if tarefas else {}
+        r = _fut_ad.result()
+
+    # POSPROCESSAMENTO NA ORDEM ORIGINAL: gate-ad -> ritmo -> colisao -> contraste.
+    print(r.stdout, flush=True)
+    motivos = [l.strip(" -") for l in r.stdout.split("\n") if l.strip().startswith("- ")]
+    ok = r.returncode == 0
+
+    if _tem_ritmo:
+        _rr = _res_outras["ritmo"]
+        print(_rr.stdout, flush=True)
+        if _rr.returncode != 0:
+            ok = False
+            _ls = [l.strip() for l in _rr.stdout.split("\n") if "REPROVA" in l]
+            motivos.append("ritmo: " + "; ".join(_ls[:2])[:180])
+
+    if _tem_colisao:
+        rc = _res_outras["colisao"]
+        print(rc.stdout, flush=True)
+        if rc.returncode != 0:
+            ok = False
+            extras = [l.strip() for l in rc.stdout.split("\n") if "texto cobre" in l]
+            # GATE QUE MORRE NAO E GATE QUE REPROVA (28/08/2026). O build 26 saiu com
+            # veredito "REPROVADO" e detalhe "colisao texto x rosto: ", sem UMA colisao
+            # listada: o gate tinha morrido (rc != 0, stdout vazio) e o veredito
+            # traduziu a morte dele em defeito do video. Rodando na mao, o mesmo
+            # arquivo PASSOU. Falha de ferramenta e defeito de material sao coisas
+            # diferentes e agora aparecem com nomes diferentes, com o stderr junto:
+            # veredito vazio manda refazer render de 12min a toa.
+            if not extras:
+                err = (rc.stderr or "").strip().replace("\n", " ")[-300:]
+                motivos.append(f"GATE DE COLISAO NAO RODOU (saida {rc.returncode}, "
+                               f"sem achado no stdout): {err or 'sem stderr'}")
+                print(f"   !! gate de colisao morreu (saida {rc.returncode}): "
+                      f"{err or 'sem stderr'}", flush=True)
+            else:
                 motivos.append("colisao texto x rosto: " + "; ".join(extras[:3]))
+
+    if _tem_contraste:
+        rc2 = _res_outras["contraste"]
+        print(rc2.stdout, flush=True)
+        if rc2.returncode != 0:
+            ok = False
+            if "REPROVA" in rc2.stdout:
+                _ls2 = [l.strip() for l in rc2.stdout.split("\n") if l.startswith("   t=")]
+                motivos.append("contraste da legenda: " + "; ".join(_ls2[:2]))
+            else:
+                # GATE QUE MORRE NAO APROVA (mesma regra do gate de colisao, 28/08).
+                err2 = (rc2.stderr or "").strip().replace("\n", " ")[-300:]
+                motivos.append(f"GATE DE CONTRASTE NAO RODOU (saida {rc2.returncode}): "
+                               f"{err2 or 'sem stderr'}")
+                print(f"   !! gate de contraste morreu (saida {rc2.returncode}): "
+                      f"{err2 or 'sem stderr'}", flush=True)
+
+    # FOLHA DE CONTATO OBRIGATORIA (31/08/2026): em 29/08/2026 o anuncio foi avaliado
+    # olhando 8 quadros isolados do roteiro e passou; so quando alguem assistiu a
+    # folha do video inteiro o diagnostico mudou. E a tira a 0,05s em volta dos cortes
+    # achou 4 quadros rasgados que ninguem tinha visto olhando quadro a quadro. Por
+    # isso, PASSE ou REPROVE o gate, as duas folhas saem sempre: ninguem avalia
+    # anuncio sem ter visto o filme inteiro. Erro aqui nunca muda o veredito do gate,
+    # so fica sem prova visual pra quem for olhar depois.
+    try:
+        _pref_fc = "" if str(ad).startswith("jh") else "ad"
+        _finais_fc = sorted(V1.glob(f"output/{_pref_fc}{ad}v2_*_v2composite_{fmt}.mp4"),
+                             key=lambda p: p.stat().st_mtime)
+        if _finais_fc:
+            from folhas_contato import gerar_folhas
+            _pasta_fc = V1 / "output" / f"{ad}_folhas"
+            _p_inteira, _p_tiras = gerar_folhas(_finais_fc[-1], _pasta_fc)
+            print(f"folha de contato (video inteiro): {_p_inteira}", flush=True)
+            print(f"folha de contato (tiras de corte): {_p_tiras}", flush=True)
+    except Exception as _e_fc:
+        print(f"folha de contato: erro ao gerar, seguindo sem ela ({_e_fc})", flush=True)
+
     return ok, "; ".join(motivos)
 
 
