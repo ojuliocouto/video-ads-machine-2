@@ -53,9 +53,15 @@ LOOK_POR_AD = {
     # servem em 9x16. Dos 9 looks, so 3 sao verticais nativos: #1 e #8 (close, boca
     # deformada) e #4 estudio_verde (plano medio). Entao a leva 2 inteira vai de
     # estudio_verde ate existir outro look vertical em plano medio.
-    "13": "estudio_verde", "14": "estudio_verde", "15": "estudio_verde",
-    "16": "estudio_verde", "17": "estudio_verde", "18": "estudio_verde",
-    "19": "estudio_verde", "20": "estudio_verde", "21": "estudio_verde",
+    # MAPA DA LEVA 2 CORRIGIDO (01/09/2026, achado da auditoria pre-apresentacao).
+    # Os nove apontavam pro `estudio_verde`, que saiu da lista permitida em 17/08 por
+    # nao pertencer ao grupo THALES LARAY OFICIAL: rodar `produzir_ad.py 14` sem look
+    # explicito reprovava na entrada. O default agora e o look que cada ad JA usou no
+    # ultimo build entregue (conferido pelos arquivos em output/); 17-21 ainda nao
+    # buildaram e caem no espuma_roxa, o unico da leva validado pelo Julio em close.
+    "13": "espuma_roxa", "14": "oficial_13", "15": "neon_creme",
+    "16": "espuma_roxa", "17": "espuma_roxa", "18": "espuma_roxa",
+    "19": "espuma_roxa", "20": "espuma_roxa", "21": "espuma_roxa",
 }
 
 
@@ -163,6 +169,8 @@ LOOKS_OK_9X16 = {
 }
 LOOKS_VETADOS = {
     "dentro_carro": "vetado pelo Julio em 05/08/2026: enquadramento diagonal, de perfil",
+    "estudio_verde": "fora do grupo THALES LARAY OFICIAL (ordem de 17/08/2026); ja "
+                     "custou refazer o AD14 e o AD22 da leva da Jheni",
 }
 
 

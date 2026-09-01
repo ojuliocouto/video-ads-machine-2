@@ -242,11 +242,22 @@ def cmd_check_build(ad):
     for p in sorted(V2L.glob("_fase_status_*.json")):
         st = json.loads(p.read_text())
         if ad in st.get("ads", []):
-            faltas = [f for f in ("fase0", "fase1", "plano") if not st.get(f)]
-            if faltas:
-                sys.exit(f"FASE_GATE: AD{ad} (leva {st['leva']}) bloqueado. Pendente: {faltas}. "
-                         "Ver python3 fase_gate.py status " + st["leva"])
-            print(f"OK AD{ad}: fases da leva {st['leva']} completas, build liberado")
+            # DUAS CERIMONIAS, NAO CINCO (01/09/2026, ordem do Julio: "a skill ta
+            # burocratica?"). Este check exigia fase0 e fase1 REGISTRADAS a mao, e o
+            # criterio de burocracia excessiva e o fluxo real contornar o oficial: na
+            # semana de 25-31/08 foram 11 builds e nenhum registro novo, porque o
+            # gate_entrada do produzir_ad ja MEDE a mesma evidencia direto do disco
+            # (clean existe, respiro por energia, duracao do avatar vs clean por
+            # ffprobe), e medir e mais forte que registrar. Cerimonia humana que sobra:
+            # `aprovar-plano` (o ok do Julio, aqui) e `check-entrega` (nota minima 8).
+            # Os comandos `marcar`/`registrar-edicao` continuam existindo como
+            # contabilidade opcional, mas nao bloqueiam mais.
+            if not st.get("plano"):
+                sys.exit(f"FASE_GATE: AD{ad} (leva {st['leva']}) bloqueado: plano de "
+                         "edicao sem o OK do Julio. Rode fase_gate.py aprovar-plano "
+                         "DEPOIS do ok explicito dele no chat; sem isso nao se monta.")
+            print(f"OK AD{ad}: plano da leva {st['leva']} aprovado, build liberado "
+                  "(fase0/fase1 sao medidas pelo gate de entrada do build)")
             return
     import os
     if os.environ.get("FASE_GATE_LEGADO") == "1":
