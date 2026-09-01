@@ -183,8 +183,20 @@ def cmd_registrar_nota(leva, ad, nota, evidencia):
     print(f"OK nota {nota} registrada pro AD{ad} (evidencia: {ev.name})")
 
 
+# NOTA MINIMA 8, UMA RODADA SO (01/09/2026, ordem do Julio). A regra anterior era 9
+# com ciclo "abaixo de 9 refaz", e o ciclo virou o problema: rodadas de auditoria
+# completas se empilhando por horas, e ele revisando tudo no fim de qualquer jeito
+# ("nao ta adiantando nada ter 14913921 auditorias, eu sempre acabo revisando").
+# O dado que sustenta a troca: na semana de 25-31/08 o ciclo de nota nao rodou NENHUMA
+# vez (11 builds do jh13, nota null) e quem pegou defeito real foram os gates MEDIDOS
+# e o proprio Julio. Auditoria LLM vira UMA passada: audita, corrige o que ela apontou,
+# registra a nota e entrega. Reprovou (<8)? Corrige os achados e reconfere OS MESMOS
+# achados, nunca uma varredura completa nova. Os gates medidos continuam intocados.
+NOTA_MINIMA = 8
+
+
 def cmd_check_entrega(ad):
-    """Bloqueia entrega sem auditoria com nota >= 9 (regra do Julio)."""
+    """Bloqueia entrega sem auditoria com nota >= NOTA_MINIMA (uma rodada, ver acima)."""
     ad = ad.zfill(2)
     for p in sorted(V2L.glob("_fase_status_*.json")):
         st = json.loads(p.read_text())
@@ -194,9 +206,10 @@ def cmd_check_entrega(ad):
                 sys.exit(f"ENTREGA BLOQUEADA: AD{ad} sem nota de auditoria registrada. "
                          f"Rode: fase_gate.py registrar-nota {st['leva']} {ad} "
                          "--nota N --evidencia <relatorio>")
-            if n["nota"] < 9:
-                sys.exit(f"ENTREGA BLOQUEADA: AD{ad} com nota {n['nota']} (minimo 9). "
-                         "Abaixo de 9 refaz, nao entrega.")
+            if n["nota"] < NOTA_MINIMA:
+                sys.exit(f"ENTREGA BLOQUEADA: AD{ad} com nota {n['nota']} "
+                         f"(minimo {NOTA_MINIMA}). Corrija os achados DESSA auditoria "
+                         "e reconfira os mesmos pontos; varredura nova, nao.")
             print(f"OK AD{ad}: nota {n['nota']}, entrega liberada")
             return
     sys.exit(f"ENTREGA BLOQUEADA: AD{ad} nao pertence a nenhuma leva registrada.")
